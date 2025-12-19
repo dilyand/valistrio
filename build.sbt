@@ -4,7 +4,7 @@ lazy val versions = new {
   val circe      = "0.14.9"
   val fs2        = "3.12.2"
   val scalaTest  = "3.2.19"
-  val http4s          = "0.23.27"
+  val http4s          = "0.23.33"
 }
 
 lazy val deps = new {
