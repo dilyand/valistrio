@@ -4,7 +4,7 @@ import cats.effect.IO
 import com.comcast.ip4s.{Host, Port}
 import org.http4s.{Header, HttpApp, HttpRoutes, Request, Response}
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.middleware.{Caching, ErrorAction, ErrorHandling, Logger}
+import org.http4s.server.middleware.{Caching, ErrorAction, ErrorHandling, Logger, ResponseTiming}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.ServerConfig
 
@@ -21,6 +21,8 @@ class Server(conf: ServerConfig) {
   private def mkApp: HttpApp[IO] = {
     val service: HttpRoutes[IO] = Routes.health
     val base: HttpApp[IO]       = service.orNotFound
+
+    val addTiming: HttpApp[IO] => HttpApp[IO] = ResponseTiming(_)
 
     val disableResponseCaching: HttpApp[IO] => HttpApp[IO] = { app =>
       HttpApp[IO] { req =>
@@ -50,7 +52,7 @@ class Server(conf: ServerConfig) {
       Logger.httpApp(logHeaders = true, logBody = false) // TODO: revisit logBody
 
     val addMiddlewareTo: HttpApp[IO] => HttpApp[IO] =
-      disableResponseCaching.andThen(addErrorHandling).andThen(addLogging)
+      addTiming.andThen(disableResponseCaching).andThen(addErrorHandling).andThen(addLogging)
 
     addMiddlewareTo(base)
   }
