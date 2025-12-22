@@ -4,7 +4,15 @@ import cats.effect.IO
 import com.comcast.ip4s.{Host, Port}
 import org.http4s.{Header, HttpApp, HttpRoutes, Request, Response}
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.middleware.{Caching, ErrorAction, ErrorHandling, Logger, ResponseTiming}
+import org.http4s.server.middleware.{
+  AutoSlash,
+  Caching,
+  DefaultHead,
+  ErrorAction,
+  ErrorHandling,
+  Logger,
+  ResponseTiming
+}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.ServerConfig
 
@@ -19,8 +27,15 @@ class Server(conf: ServerConfig) {
     } yield ()
 
   private def mkApp: HttpApp[IO] = {
-    val service: HttpRoutes[IO] = Routes.health
-    val base: HttpApp[IO]       = service.orNotFound
+    val routes = Routes.health
+
+    val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
+    val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
+
+    val addRoutingMiddlewareTo: HttpRoutes[IO] => HttpRoutes[IO] = addAutoSlash.andThen(addDefaultHead)
+
+    val service: HttpRoutes[IO] = addRoutingMiddlewareTo(routes)
+    val baseApp: HttpApp[IO]    = service.orNotFound
 
     val addTiming: HttpApp[IO] => HttpApp[IO] = ResponseTiming(_)
 
@@ -51,10 +66,10 @@ class Server(conf: ServerConfig) {
     val addLogging: HttpApp[IO] => HttpApp[IO] =
       Logger.httpApp(logHeaders = true, logBody = false) // TODO: revisit logBody
 
-    val addMiddlewareTo: HttpApp[IO] => HttpApp[IO] =
+    val addAppMiddlewareTo: HttpApp[IO] => HttpApp[IO] =
       addTiming.andThen(disableResponseCaching).andThen(addErrorHandling).andThen(addLogging)
 
-    addMiddlewareTo(base)
+    addAppMiddlewareTo(baseApp)
   }
 
   private def errorHandler(t: Throwable, msg: => String): IO[Unit] =
