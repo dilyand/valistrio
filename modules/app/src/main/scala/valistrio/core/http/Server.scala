@@ -7,10 +7,13 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{
   AutoSlash,
   Caching,
+  ConcurrentRequests,
   DefaultHead,
+  EntityLimiter,
   ErrorAction,
   ErrorHandling,
   Logger,
+  MaxActiveRequests,
   ResponseTiming
 }
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -37,7 +40,8 @@ class Server(conf: ServerConfig) {
     val service: HttpRoutes[IO] = addRoutingMiddlewareTo(routes)
     val baseApp: HttpApp[IO]    = service.orNotFound
 
-    val addTiming: HttpApp[IO] => HttpApp[IO] = ResponseTiming(_)
+    val addEntityLimit: HttpApp[IO] => HttpApp[IO] = EntityLimiter.httpApp(_, conf.maxBytes)
+    val addTiming: HttpApp[IO] => HttpApp[IO]      = ResponseTiming(_)
 
     val disableResponseCaching: HttpApp[IO] => HttpApp[IO] = { app =>
       HttpApp[IO] { req =>
@@ -67,7 +71,7 @@ class Server(conf: ServerConfig) {
       Logger.httpApp(logHeaders = true, logBody = false) // TODO: revisit logBody
 
     val addAppMiddlewareTo: HttpApp[IO] => HttpApp[IO] =
-      addTiming.andThen(disableResponseCaching).andThen(addErrorHandling).andThen(addLogging)
+      addEntityLimit.andThen(addTiming).andThen(disableResponseCaching).andThen(addErrorHandling).andThen(addLogging)
 
     addAppMiddlewareTo(baseApp)
   }
