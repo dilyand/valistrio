@@ -14,7 +14,8 @@ import org.http4s.server.middleware.{
   ErrorHandling,
   Logger,
   MaxActiveRequests,
-  ResponseTiming
+  ResponseTiming,
+  Timeout
 }
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.ServerConfig
@@ -40,8 +41,10 @@ class Server(conf: ServerConfig) {
     val service: HttpRoutes[IO] = addRoutingMiddlewareTo(routes)
     val baseApp: HttpApp[IO]    = service.orNotFound
 
-    val addEntityLimit: HttpApp[IO] => HttpApp[IO] = EntityLimiter.httpApp(_, conf.maxBytes)
-    val addTiming: HttpApp[IO] => HttpApp[IO]      = ResponseTiming(_)
+    val addEntityLimit: HttpApp[IO] => HttpApp[IO] =
+      EntityLimiter.httpApp(_, conf.maxBytes) // max(maxEventSize, maxRequestBodySize)
+    val addTimeout: HttpApp[IO] => HttpApp[IO] = Timeout.httpApp[IO](conf.requestTimeout)(_)
+    val addTiming: HttpApp[IO] => HttpApp[IO]  = ResponseTiming(_)
 
     val disableResponseCaching: HttpApp[IO] => HttpApp[IO] = { app =>
       HttpApp[IO] { req =>
@@ -71,7 +74,12 @@ class Server(conf: ServerConfig) {
       Logger.httpApp(logHeaders = true, logBody = false) // TODO: revisit logBody
 
     val addAppMiddlewareTo: HttpApp[IO] => HttpApp[IO] =
-      addEntityLimit.andThen(addTiming).andThen(disableResponseCaching).andThen(addErrorHandling).andThen(addLogging)
+      addEntityLimit
+        .andThen(addTimeout)
+        .andThen(addTiming)
+        .andThen(disableResponseCaching)
+        .andThen(addErrorHandling)
+        .andThen(addLogging)
 
     addAppMiddlewareTo(baseApp)
   }
