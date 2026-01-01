@@ -33,10 +33,11 @@ class Server(conf: ServerConfig) {
   private def mkApp: HttpApp[IO] = {
     val routes = Routes.health
 
+    val addAuth: HttpRoutes[IO] => HttpRoutes[IO]        = identity // TODO
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
 
-    val addRoutingMiddlewareTo: HttpRoutes[IO] => HttpRoutes[IO] = addAutoSlash.andThen(addDefaultHead)
+    val addRoutingMiddlewareTo: HttpRoutes[IO] => HttpRoutes[IO] = addAuth.andThen(addAutoSlash).andThen(addDefaultHead)
 
     val service: HttpRoutes[IO] = addRoutingMiddlewareTo(routes)
     val baseApp: HttpApp[IO]    = service.orNotFound
@@ -70,8 +71,11 @@ class Server(conf: ServerConfig) {
         )
     }
 
+    val addCors: HttpApp[IO] => HttpApp[IO] = identity // TODO
+
+    // make configurable
     val addLogging: HttpApp[IO] => HttpApp[IO] =
-      Logger.httpApp(logHeaders = true, logBody = false) // TODO: revisit logBody
+      Logger.httpApp(logHeaders = true, logBody = false) // logBody = true only for testing
 
     val addAppMiddlewareTo: HttpApp[IO] => HttpApp[IO] =
       addEntityLimit
@@ -79,11 +83,12 @@ class Server(conf: ServerConfig) {
         .andThen(addTiming)
         .andThen(disableResponseCaching)
         .andThen(addErrorHandling)
+        .andThen(addCors)
         .andThen(addLogging)
 
     addAppMiddlewareTo(baseApp)
   }
 
   private def errorHandler(t: Throwable, msg: => String): IO[Unit] =
-    logger.error(t)(s"Error Message: $msg \nStack Trace:\n${t.getStackTrace.mkString("Array(", ", ", ")")}")
+    logger.error(t)(s"Error message: $msg \nCaused by:\n${t.getMessage}")
 }
