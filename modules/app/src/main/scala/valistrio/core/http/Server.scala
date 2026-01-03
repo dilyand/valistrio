@@ -2,18 +2,16 @@ package valistrio.core.http
 
 import cats.effect.IO
 import com.comcast.ip4s.{Host, Port}
-import org.http4s.{Header, HttpApp, HttpRoutes, Request, Response}
+import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{
   AutoSlash,
   Caching,
-  ConcurrentRequests,
   DefaultHead,
   EntityLimiter,
   ErrorAction,
   ErrorHandling,
   Logger,
-  MaxActiveRequests,
   ResponseTiming,
   Timeout
 }
@@ -33,11 +31,10 @@ class Server(conf: ServerConfig) {
   private def mkApp: HttpApp[IO] = {
     val routes = Routes.health
 
-    val addAuth: HttpRoutes[IO] => HttpRoutes[IO]        = identity // TODO
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
 
-    val addRoutingMiddlewareTo: HttpRoutes[IO] => HttpRoutes[IO] = addAuth.andThen(addAutoSlash).andThen(addDefaultHead)
+    val addRoutingMiddlewareTo: HttpRoutes[IO] => HttpRoutes[IO] = addAutoSlash.andThen(addDefaultHead)
 
     val service: HttpRoutes[IO] = addRoutingMiddlewareTo(routes)
     val baseApp: HttpApp[IO]    = service.orNotFound
