@@ -1,6 +1,6 @@
 package valistrio.core
 
-sealed abstract class ValistrioError {
+sealed abstract class ValistrioError extends Throwable {
   val msg: String
 }
 

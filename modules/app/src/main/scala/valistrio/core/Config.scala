@@ -1,5 +1,6 @@
 package valistrio.core
 
+import cats.effect.{IO, Resource}
 import cats.implicits._
 import io.circe.Decoder
 import io.circe.generic.semiauto.deriveDecoder
@@ -39,7 +40,12 @@ object Config {
   private val Namespace          = "valistrio"
   val ValistrioConfigVar: String = "VALISTRIO_CONFIG"
 
-  def get(encodedStr: String): Either[ValistrioError, Config] = {
+  def make: IO[Config] = get(sys.env.getOrElse(ValistrioConfigVar, "")) match {
+    case Right(c) => IO.pure(c)
+    case Left(err) => IO.raiseError(err)
+  }
+
+  private def get(encodedStr: String): Either[ValistrioError, Config] = {
     val result = for {
       bytes <- Either.catchOnly[IllegalArgumentException](base64.decode(encodedStr)).leftMap(_.getMessage)
       config <-
