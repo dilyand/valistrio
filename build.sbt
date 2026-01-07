@@ -9,6 +9,8 @@ lazy val versions = new {
   val http4s      = "0.23.33"
   val logging     = "2.7.0"
   val slf4j       = "2.0.16"
+
+  val specs2 = "4.20.8"
 }
 
 lazy val deps = new {
@@ -28,7 +30,7 @@ lazy val deps = new {
   val logging           = "org.typelevel"         %% "log4cats-slf4j"      % versions.logging
   val slf4j             = "org.slf4j"              % "slf4j-simple"        % versions.slf4j
 
-  val scalaTest = "org.scalatest" %% "scalatest" % versions.scalaTest % Test
+  val specs2 = "org.specs2" %% "specs2-core" % versions.specs2 % Test
 }
 
 lazy val commonSettings = Seq(
@@ -51,7 +53,7 @@ lazy val commonSettings = Seq(
     deps.http4sEmberServer,
     deps.logging,
     deps.slf4j,
-    deps.scalaTest
+    deps.specs2
   )
 )
 

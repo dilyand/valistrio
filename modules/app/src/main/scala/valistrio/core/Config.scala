@@ -45,7 +45,7 @@ object Config {
     case Left(err) => IO.raiseError(err)
   }
 
-  private def get(encodedStr: String): Either[ValistrioError, Config] = {
+  private[core] def get(encodedStr: String): Either[ValistrioError, Config] = {
     val result = for {
       bytes <- Either.catchOnly[IllegalArgumentException](base64.decode(encodedStr)).leftMap(_.getMessage)
       config <-
