@@ -1,6 +1,6 @@
 package valistrio.core
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
 import cats.implicits._
 import io.circe.Decoder
 import io.circe.generic.semiauto.deriveDecoder
@@ -26,7 +26,7 @@ object Config {
           Left(
             s"""Duration value '$s' resolved to a non-finite duration ($other).
            Finite duration required. Examples: '5 seconds', '30s', '1 minute', '500 millis'.
-           """
+           """.stripMargin
           )
       }
     }
