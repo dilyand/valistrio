@@ -16,4 +16,7 @@ package object fixtures {
   val base64EncodedReferenceConf = new String(Base64.getEncoder.encode(referenceConf.getBytes))
 
   val parsedReferenceConf = Config(ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds))
+
+  val malformedHocon              = referenceConf + "}"
+  val base64EncodedMalformedHocon = new String(Base64.getEncoder.encode(malformedHocon.getBytes))
 }

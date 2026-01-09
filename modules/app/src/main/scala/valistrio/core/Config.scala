@@ -7,7 +7,8 @@ import io.circe.generic.semiauto.deriveDecoder
 import io.circe.config.parser
 import com.typesafe.config.{ConfigException, ConfigFactory, Config => TypesafeConfig}
 import valistrio.core.Config._
-import valistrio.core.ValistrioError.ConfigParsingError
+import valistrio.core.ValistrioError.ConfigError._
+import valistrio.core.ValistrioError.ConfigError
 
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -41,22 +42,21 @@ object Config {
   val ValistrioConfigVar: String = "VALISTRIO_CONFIG"
 
   def make: IO[Config] = get(sys.env.getOrElse(ValistrioConfigVar, "")) match {
-    case Right(c) => IO.pure(c)
+    case Right(c)  => IO.pure(c)
     case Left(err) => IO.raiseError(err)
   }
 
-  private[core] def get(encodedStr: String): Either[ValistrioError, Config] = {
-    val result = for {
-      bytes <- Either.catchOnly[IllegalArgumentException](base64.decode(encodedStr)).leftMap(_.getMessage)
+  private[core] def get(encodedStr: String): Either[ConfigError, Config] =
+    for {
+      bytes <- Either
+        .catchOnly[IllegalArgumentException](base64.decode(encodedStr))
+        .leftMap(e => NotBase64(e.getMessage))
       config <-
         Either
           .catchOnly[ConfigException](ConfigFactory.parseString(new String(bytes, StandardCharsets.UTF_8)))
-          .leftMap(_.getMessage)
+          .leftMap(e => TypesafeConfigError(e.getMessage))
       parsed <- parse(config)
     } yield parsed
-
-    result.leftMap(e => ConfigParsingError(e))
-  }
 
   /** Parses the given HOCON config using the standard Typesafe Config layering model,
     * while allowing user-provided configuration to override defaults.
@@ -68,7 +68,7 @@ object Config {
     *  3. `application.conf` of this application
     *  4. `reference.conf` of this application and any dependent libraries
     */
-  private def parse(hocon: TypesafeConfig): Either[String, Config] = {
+  private def parse(hocon: TypesafeConfig): Either[ParsingFailure, Config] = {
     val sys = ConfigFactory.defaultOverrides() // system properties
     val defaults = ConfigFactory
       .defaultApplication()                           // application.conf
@@ -76,7 +76,7 @@ object Config {
 
     val merged = namespaced(sys.withFallback(hocon).withFallback(defaults))
 
-    parser.decode[Config](merged).leftMap(_.show)
+    parser.decode[Config](merged).leftMap(e => ParsingFailure(e.show))
   }
 
   /** Optionally give precedence to configs wrapped in a "valistrio" block, to help avoid polluting the config namespace */
