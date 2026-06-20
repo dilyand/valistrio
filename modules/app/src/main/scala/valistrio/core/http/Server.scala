@@ -1,24 +1,16 @@
 package valistrio.core.http
 
 import cats.effect.IO
+import cats.implicits.toSemigroupKOps
 import com.comcast.ip4s.{Host, Port}
 import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.middleware.{
-  AutoSlash,
-  Caching,
-  DefaultHead,
-  EntityLimiter,
-  ErrorAction,
-  ErrorHandling,
-  Logger,
-  ResponseTiming,
-  Timeout
-}
+import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.ServerConfig
+import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
-class Server(conf: ServerConfig) {
+class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry[IO]) {
   implicit val logger: org.typelevel.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
 
   def run: IO[Unit] =
@@ -29,7 +21,8 @@ class Server(conf: ServerConfig) {
     } yield ()
 
   private def mkApp: HttpApp[IO] = {
-    val routes = Routes.health
+    val validateService = new ValidateService(schemaRegistry)
+    val routes          = Routes.health <+> Routes.validate(validateService)
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
@@ -48,7 +41,7 @@ class Server(conf: ServerConfig) {
       HttpApp[IO] { req =>
         app(req).flatMap { resp =>
           val p             = req.uri.path.renderString
-          val shouldDisable = p == "/health"
+          val shouldDisable = p == "/health" || p == "/validate"
 
           if (shouldDisable) Caching.`no-store-response`[IO](resp)
           else IO.pure(resp)

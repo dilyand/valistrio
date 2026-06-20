@@ -1,13 +1,19 @@
 package valistrio
 
 import cats.effect.{ExitCode, IO, IOApp}
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config
 import valistrio.core.http.Server
+import valistrio.core.validate.{ConfluentSchemaRegistry, SchemaRegistry}
 
 object Main extends IOApp {
   override def run(args: List[String]): IO[ExitCode] = {
-    val conf = Config.make
+    implicit val logger = Slf4jLogger.getLogger[IO]
 
-    conf.map(c => new Server(c.server)).flatMap(_.run.as(ExitCode.Success))
+    Config.make.flatMap { conf =>
+      ConfluentSchemaRegistry.resource(conf.schemaRegistry).use { schemaRegistry =>
+        new Server(conf.server, schemaRegistry).run.as(ExitCode.Success)
+      }
+    }
   }
 }

@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-final case class Config(server: ServerConfig)
+final case class Config(server: ServerConfig, schemaRegistry: SchemaRegistryConfig)
 
 object Config {
   implicit val configDecoder: Decoder[Config] = deriveDecoder[Config]
@@ -35,6 +35,11 @@ object Config {
   final case class ServerConfig(host: String, port: Int, maxBytes: Long, requestTimeout: FiniteDuration)
   object ServerConfig {
     implicit val serverConfigDecoder: Decoder[ServerConfig] = deriveDecoder[ServerConfig]
+  }
+
+  final case class SchemaRegistryConfig(url: String, timeoutMs: Int)
+  object SchemaRegistryConfig {
+    implicit val schemaRegistryConfigDecoder: Decoder[SchemaRegistryConfig] = deriveDecoder[SchemaRegistryConfig]
   }
 
   private val base64             = Base64.getDecoder
@@ -68,7 +73,7 @@ object Config {
     *  3. `application.conf` of this application
     *  4. `reference.conf` of this application and any dependent libraries
     */
-  private def parse(hocon: TypesafeConfig): Either[ParsingFailure, Config] = {
+  private def parse(hocon: TypesafeConfig): Either[ParsingError, Config] = {
     val sys = ConfigFactory.defaultOverrides() // system properties
     val defaults = ConfigFactory
       .defaultApplication()                           // application.conf
@@ -76,10 +81,10 @@ object Config {
 
     val merged = namespaced(sys.withFallback(hocon).withFallback(defaults))
 
-    parser.decode[Config](merged).leftMap(e => ParsingFailure(e.show))
+    parser.decode[Config](merged).leftMap(e => ParsingError(e.show))
   }
 
-  /** Optionally give precedence to configs wrapped in a "valistrio" block, to help avoid polluting the config namespace */
+  /** Config wrapped in a "valistrio" block will be given precedence */
   private def namespaced(config: TypesafeConfig): TypesafeConfig =
     if (config.hasPath(Namespace)) config.getConfig(Namespace).withFallback(config.withoutPath(Namespace))
     else config
