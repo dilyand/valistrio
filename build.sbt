@@ -1,3 +1,6 @@
+import com.typesafe.sbt.packager.docker.DockerPlugin.autoImport._
+import sbtbuildinfo.BuildInfoKey
+
 lazy val versions = new {
   val catsCore    = "2.10.0"
   val catsEffect  = "3.5.4"
@@ -15,7 +18,10 @@ lazy val versions = new {
   val jsonSchemaSerializer = "7.4.1"
   val jsonSchemaValidator  = "1.0.76"
 
-  val specs2 = "4.20.8"
+  val specs2              = "4.20.8"
+  val catsEffectTesting   = "1.5.0"
+  val testcontainers      = "1.20.4"
+  val testcontainersScala = "0.41.3"
 }
 
 lazy val deps = new {
@@ -40,7 +46,10 @@ lazy val deps = new {
   val jsonSchemaSerializer = "io.confluent"  % "kafka-json-schema-serializer" % versions.jsonSchemaSerializer
   val jsonSchemaValidator  = "com.networknt" % "json-schema-validator"        % versions.jsonSchemaValidator
 
-  val specs2 = "org.specs2" %% "specs2-core" % versions.specs2 % Test
+  val specs2              = "org.specs2"       %% "specs2-core"                % versions.specs2            % Test
+  val catsEffectTesting   = "org.typelevel"    %% "cats-effect-testing-specs2" % versions.catsEffectTesting % Test
+  val testcontainers      = "org.testcontainers" % "testcontainers"            % versions.testcontainers    % Test
+  val testcontainersScala = "com.dimafeng"     %% "testcontainers-scala-core"  % versions.testcontainersScala % Test
 }
 
 lazy val commonSettings = Seq(
@@ -71,4 +80,64 @@ lazy val commonSettings = Seq(
   )
 )
 
-lazy val app = project.in(file("modules/app")).enablePlugins(sbt.plugins.JvmPlugin).settings(commonSettings)
+// Fixed tag used by both the Docker build and ValistrioContainer
+val DockerImageTag = "it"
+
+lazy val app = project
+  .in(file("modules/app"))
+  .enablePlugins(sbt.plugins.JvmPlugin, JavaAppPackaging, DockerPlugin, BuildInfoPlugin)
+  .settings(
+    commonSettings,
+    // Docker
+    Docker / packageName    := "valistrio",
+    Docker / version        := DockerImageTag,
+    dockerBaseImage         := "eclipse-temurin:17-jre-jammy",
+    dockerExposedPorts      := Seq(8080),
+    dockerUpdateLatest      := false,
+    // BuildInfo — exposes image coordinates to the IT module
+    buildInfoPackage        := "valistrio",
+    buildInfoKeys           := Seq[BuildInfoKey](
+      BuildInfoKey.action("dockerImageName") { "valistrio" },
+      BuildInfoKey.action("dockerImageTag")  { DockerImageTag }
+    )
+  )
+
+lazy val it = project
+  .in(file("modules/it"))
+  .dependsOn(app % "compile->compile;test->test")
+  .settings(
+    scalaVersion                  := "2.13.16",
+    resolvers                     += "Confluent" at "https://packages.confluent.io/maven/",
+    publish / skip                := true,
+    Global / lintUnusedKeysOnLoad := false,
+    Test / fork                   := true,
+    // On macOS, Docker Desktop 29+ has minimum API version 1.40 but docker-java
+    // (bundled with Testcontainers) defaults to v1.26, causing 400 responses.
+    // We fix this with a JVM system property (docker-java reads api.version) and
+    // an env var so Testcontainers itself also sees the right version.
+    Test / javaOptions            ++= Seq(
+      "-Dapi.version=1.41",
+      "-DDOCKER_API_VERSION=1.41",
+      s"-DDOCKER_HOST=unix:///var/run/docker.sock"
+    ),
+    Test / envVars                ++= {
+      val host = sys.env.getOrElse("DOCKER_HOST", "unix:///var/run/docker.sock")
+      Map(
+        "DOCKER_HOST"                          -> host,
+        "DOCKER_API_VERSION"                   -> "1.41",
+        "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE" -> "/var/run/docker.sock"
+      )
+    },
+    Test / test     := (Test / test).dependsOn(app / Docker / publishLocal).value,
+    Test / testOnly := (Test / testOnly).dependsOn(app / Docker / publishLocal).evaluated,
+    libraryDependencies ++= Seq(
+      deps.catsEffect,
+      deps.catsEffectTesting,
+      deps.testcontainers,
+      deps.testcontainersScala,
+      deps.http4sEmberClient,
+      deps.logging,
+      deps.slf4j,
+      deps.specs2
+    )
+  )
