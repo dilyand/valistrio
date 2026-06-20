@@ -10,6 +10,11 @@ lazy val versions = new {
   val logging     = "2.7.0"
   val slf4j       = "2.0.16"
 
+  // Java
+  val schemaRegistry       = "7.7.0"
+  val jsonSchemaSerializer = "7.4.1"
+  val jsonSchemaValidator  = "1.0.76"
+
   val specs2 = "4.20.8"
 }
 
@@ -30,11 +35,17 @@ lazy val deps = new {
   val logging           = "org.typelevel"         %% "log4cats-slf4j"      % versions.logging
   val slf4j             = "org.slf4j"              % "slf4j-simple"        % versions.slf4j
 
+  // Java
+  val schemaRegistry       = "io.confluent"  % "kafka-schema-registry-client" % versions.schemaRegistry
+  val jsonSchemaSerializer = "io.confluent"  % "kafka-json-schema-serializer" % versions.jsonSchemaSerializer
+  val jsonSchemaValidator  = "com.networknt" % "json-schema-validator"        % versions.jsonSchemaValidator
+
   val specs2 = "org.specs2" %% "specs2-core" % versions.specs2 % Test
 }
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.16",
+  resolvers += "Confluent" at "https://packages.confluent.io/maven/",
   Compile / mainClass := Some("valistrio.Main"),
   Global  / lintUnusedKeysOnLoad := false,
   libraryDependencies ++= Seq(
@@ -53,6 +64,9 @@ lazy val commonSettings = Seq(
     deps.http4sEmberServer,
     deps.logging,
     deps.slf4j,
+    deps.schemaRegistry,
+    deps.jsonSchemaSerializer,
+    deps.jsonSchemaValidator,
     deps.specs2
   )
 )
