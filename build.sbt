@@ -2,26 +2,26 @@ import com.typesafe.sbt.packager.docker.DockerPlugin.autoImport._
 import sbtbuildinfo.BuildInfoKey
 
 lazy val versions = new {
-  val catsCore    = "2.10.0"
-  val catsEffect  = "3.5.4"
-  val circe       = "0.14.9"
-  val circeConfig = "0.9.0"
-  val pureConfig  = "0.17.2"
-  val fs2         = "3.12.2"
+  val catsCore    = "2.13.0"
+  val catsEffect  = "3.5.7"
+  val circe       = "0.14.15"
+  val circeConfig = "0.10.2"
+  val pureConfig  = "0.17.10"
+  val fs2         = "3.13.0"
   val scalaTest   = "3.2.19"
-  val http4s      = "0.23.33"
-  val logging     = "2.7.0"
-  val slf4j       = "2.0.16"
+  val http4s      = "0.23.34"
+  val logging     = "2.7.1"
+  val slf4j       = "2.0.18"
 
   // Java
-  val schemaRegistry       = "7.7.0"
-  val jsonSchemaSerializer = "7.4.1"
-  val jsonSchemaValidator  = "1.0.76"
+  val schemaRegistry       = "7.7.10"
+  val jsonSchemaSerializer = "7.4.15"
+  val jsonSchemaValidator  = "1.0.88"
 
-  val specs2              = "4.20.8"
-  val catsEffectTesting   = "1.5.0"
-  val testcontainers      = "1.20.4"
-  val testcontainersScala = "0.41.3"
+  val specs2              = "4.20.9"
+  val catsEffectTesting   = "1.8.0"
+  val testcontainers      = "1.20.6"
+  val testcontainersScala = "0.41.8"
 }
 
 lazy val deps = new {
@@ -53,7 +53,7 @@ lazy val deps = new {
 }
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.16",
+  scalaVersion := "2.13.18",
   resolvers += "Confluent" at "https://packages.confluent.io/maven/",
   Compile / mainClass := Some("valistrio.Main"),
   Global  / lintUnusedKeysOnLoad := false,
