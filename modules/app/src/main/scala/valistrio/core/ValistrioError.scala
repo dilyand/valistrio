@@ -58,5 +58,20 @@ object ValistrioError {
 
   /** An individual schema validation error, produced by the JSON Schema validator. */
   final case class ValidationError(path: String, message: String)
+
+  sealed trait SinkError extends ValistrioError
+  final object SinkError {
+    final case class Unavailable(cause: String) extends SinkError {
+      val msg = s"Sink unavailable. $cause"
+    }
+
+    case object Timeout extends SinkError {
+      val msg = "Sink write timed out."
+    }
+
+    final case class WriteFailed(cause: String) extends SinkError {
+      val msg = s"Sink write failed. $cause"
+    }
+  }
 }
 

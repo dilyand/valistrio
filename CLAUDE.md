@@ -101,6 +101,26 @@ All errors are collected across the event and all contexts — validation does n
 
 ---
 
+## Sink abstraction (POST /post)
+
+The `Sink[F[_]]` algebra (`valistrio.core.post.Sink`) writes a validated `TransportEnvelope` to a downstream
+transport (Kafka, HTTP, in-memory for tests). `write` returns `F[Either[SinkError, Unit]]` rather than raising,
+matching the `SchemaRegistry` convention of surfacing failure as data.
+
+When a write fails, the caller routes the envelope to a DLQ using this wrapper format:
+
+```json
+{
+  "original": { "...": "the original TransportEnvelope JSON" },
+  "error": { "type": "sink_unavailable | sink_timeout | sink_write_failed", "message": "<cause>" },
+  "failed_at": "<ISO-8601 timestamp>"
+}
+```
+
+Truncation: if the serialized `original` envelope exceeds `valistrio.server.maxBytes`, it is replaced with
+`null` and `original_truncated: true` is added alongside it — the DLQ record always fits within the same
+size limit enforced on inbound requests, and oversized payloads are never silently dropped without a trace.
+
 ## GET /health
 
 Returns `200 OK` with body `ok`. No authentication required. Used as a liveness check.
