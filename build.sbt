@@ -14,8 +14,12 @@ lazy val versions = new {
   val slf4j       = "2.0.18"
 
   // Java
-  val schemaRegistry       = "7.7.10"
-  val jsonSchemaSerializer = "7.4.15"
+  // Confluent versions newer than these pin a non-existent jetty-bom version
+  // (9.4.59 / 9.4.61, missing the .vYYYYMMDD qualifier) in their parent POM,
+  // which breaks dependency resolution entirely. Pinned to the last versions
+  // with a valid jetty-bom reference.
+  val schemaRegistry       = "7.7.6"
+  val jsonSchemaSerializer = "7.4.12"
   val jsonSchemaValidator  = "1.0.88"
 
   val specs2              = "4.20.9"

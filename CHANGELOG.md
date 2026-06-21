@@ -14,6 +14,7 @@ Format: one entry per release, newest first. Each release lists its features; ch
 - **Integration test suite** — 9 tests running against the real shipped Docker image. Spins up Confluent Kafka (KRaft, no ZooKeeper) + Schema Registry 7.7.0 via Testcontainers, registers test schemas via the `SchemaRegistry` algebra, starts the Valistrio container with injected config, and makes real HTTP calls to verify the full stack end-to-end.
 
 ### Chores / Docs
+- Fixed broken `sbt compile`/`test` — the dependency audit bumped Confluent Schema Registry to `7.7.10` and JSON Schema Serializer to `7.4.15`, both of which pin a non-existent `jetty-bom` version (`9.4.61`/`9.4.59`, missing the `.vYYYYMMDD` qualifier) in their parent POM, making the whole build unresolvable. Pinned back to `7.7.6`/`7.4.12`, the last patch versions on each line with a valid `jetty-bom` reference.
 - Added the `Sink[F[_]]` algebra (`valistrio.core.post`) for writing validated envelopes to a downstream transport, plus `SinkError` and the DLQ envelope/truncation format documented in CLAUDE.md. No live implementation yet — that's the Kafka sink, tracked separately.
 - Added Confluent Schema Registry and networknt JSON Schema dependencies
 - Added CLAUDE.md recording frozen design decisions for the `/validate` payload contract
