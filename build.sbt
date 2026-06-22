@@ -110,7 +110,7 @@ lazy val it = project
   .in(file("modules/it"))
   .dependsOn(app % "compile->compile;test->test")
   .settings(
-    scalaVersion                  := "2.13.16",
+    scalaVersion                  := "2.13.18",
     resolvers                     += "Confluent" at "https://packages.confluent.io/maven/",
     publish / skip                := true,
     Global / lintUnusedKeysOnLoad := false,
