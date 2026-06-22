@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.networknt.schema.{JsonSchemaFactory, SpecVersion}
 import io.circe.Json
 import io.confluent.kafka.schemaregistry.client.{CachedSchemaRegistryClient, SchemaRegistryClient}
+import io.confluent.kafka.schemaregistry.client.rest.RestService
 import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientException
 import io.confluent.kafka.schemaregistry.json.JsonSchema
 import org.typelevel.log4cats.Logger
@@ -32,10 +33,22 @@ object ConfluentSchemaRegistry {
     * On resource acquisition, seeds all Valistrio-owned schemas into the registry.
     * Fails (and thus prevents the app from starting) if the registry is unreachable
     * during seeding.
+    *
+    * The underlying [[RestService]]'s own connect/read timeouts are set to
+    * `config.timeoutMs`, matching the `IO.timeout` wrapped around every call in
+    * [[LiveSchemaRegistry]]. Without this, a network partition (broker down, DNS
+    * gone) blocks on the JVM's blocking-IO default timeouts (tens of seconds) before
+    * `IO.timeout` ever gets a chance to act — cancelling a fiber doesn't interrupt
+    * the blocking native call underneath it.
     */
   def resource(config: SchemaRegistryConfig)(implicit logger: Logger[IO]): Resource[IO, SchemaRegistry[IO]] =
     Resource
-      .eval(IO(new CachedSchemaRegistryClient(config.url, SchemaRegistryCacheCapacity)))
+      .eval(IO {
+        val restService = new RestService(config.url)
+        restService.setHttpConnectTimeoutMs(config.timeoutMs)
+        restService.setHttpReadTimeoutMs(config.timeoutMs)
+        new CachedSchemaRegistryClient(restService, SchemaRegistryCacheCapacity)
+      })
       .evalMap { client =>
         val registry = new LiveSchemaRegistry(client, config.timeoutMs.millis)
         seedOwnedSchemas(registry).as(registry: SchemaRegistry[IO])

@@ -188,7 +188,7 @@ valistrio {
   }
   schemaRegistry {
     url       = "http://localhost:8081"
-    timeoutMs = 3000
+    timeoutMs = 3000   # also sets the underlying REST client's connect/read timeouts
   }
   kafka {
     bootstrapServers = "localhost:9092"
