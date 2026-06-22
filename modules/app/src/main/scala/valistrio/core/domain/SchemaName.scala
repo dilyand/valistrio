@@ -1,6 +1,6 @@
 package valistrio.core.domain
 
-import io.circe.Decoder
+import io.circe.{Decoder, Encoder}
 
 /** A fully qualified schema name of the form "group/name/version",
   * e.g. "com.myorg/page_view/1.0.0".
@@ -55,4 +55,7 @@ object SchemaName {
 
   implicit val decoder: Decoder[SchemaName] =
     Decoder[String].emap(parse)
+
+  implicit val encoder: Encoder[SchemaName] =
+    Encoder[String].contramap(_.toString)
 }

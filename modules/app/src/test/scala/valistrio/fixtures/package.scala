@@ -4,7 +4,7 @@ import org.specs2.matcher.MatchResult
 import org.specs2.matcher.MustThrownMatchers.ok
 import valistrio.TestUtils._
 import valistrio.core.Config
-import valistrio.core.Config.{SchemaRegistryConfig, ServerConfig}
+import valistrio.core.Config.{KafkaConfig, SchemaRegistryConfig, ServerConfig}
 import valistrio.core.ValistrioError.ConfigError
 import valistrio.core.ValistrioError.ConfigError.{NotBase64, TypesafeConfigError}
 
@@ -18,10 +18,11 @@ package object fixtures {
 
   final object TestCase {
     private val defaultSchemaRegistry = SchemaRegistryConfig("http://localhost:8081", 3000)
+    private val defaultKafka           = KafkaConfig("localhost:9092", "valistrio.events")
 
     final object ReferenceConf extends TestCase[String, Config] {
       val in: String = fromFile("config/reference.conf")
-      val expected   = Config(ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds), defaultSchemaRegistry)
+      val expected   = Config(ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds), defaultSchemaRegistry, defaultKafka)
     }
 
     final object NB64 extends TestCase[String, PartialFunction[ConfigError, MatchResult[_]]] {
@@ -50,7 +51,7 @@ package object fixtures {
           |""".stripMargin
 
       // Should be ignored in favour of application.conf
-      val expected = Config(ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds), defaultSchemaRegistry)
+      val expected = Config(ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds), defaultSchemaRegistry, defaultKafka)
     }
 
     final object OverridePortOnlyHocon extends TestCase[String, Config] {
@@ -64,7 +65,7 @@ package object fixtures {
           |""".stripMargin
 
       // Only port should differ from application.conf
-      val expected = Config(ServerConfig("0.0.0.0", 9999, 2097152L, 5.seconds), defaultSchemaRegistry)
+      val expected = Config(ServerConfig("0.0.0.0", 9999, 2097152L, 5.seconds), defaultSchemaRegistry, defaultKafka)
     }
 
     final object OverrideSchemaRegistryUrlHocon extends TestCase[String, Config] {
@@ -79,7 +80,8 @@ package object fixtures {
 
       val expected = Config(
         ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds),
-        SchemaRegistryConfig("http://registry.internal:8081", 3000)
+        SchemaRegistryConfig("http://registry.internal:8081", 3000),
+        defaultKafka
       )
     }
 

@@ -145,6 +145,10 @@ valistrio {
     url       = "http://localhost:8081"
     timeoutMs = 3000
   }
+  kafka {
+    bootstrapServers = "localhost:9092"
+    topic            = "valistrio.events"
+  }
 }
 ```
 

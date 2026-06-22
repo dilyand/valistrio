@@ -1,0 +1,28 @@
+package valistrio.core.post
+
+import cats.effect.{IO, Ref}
+import valistrio.core.ValistrioError.SinkError
+import valistrio.core.domain.TransportEnvelope
+
+/** In-memory [[Sink]][IO] for testing code that writes through the algebra
+  * (e.g. the /post service) without a real Kafka broker.
+  */
+final class StubSink private (ref: Ref[IO, Vector[TransportEnvelope]], result: Either[SinkError, Unit])
+    extends Sink[IO] {
+
+  def write(envelope: TransportEnvelope): IO[Either[SinkError, Unit]] =
+    ref.update(_ :+ envelope).as(result)
+
+  def written: IO[Vector[TransportEnvelope]] = ref.get
+}
+
+object StubSink {
+
+  /** A stub that records every write and always succeeds. */
+  def succeeding: IO[StubSink] =
+    Ref.of[IO, Vector[TransportEnvelope]](Vector.empty).map(new StubSink(_, Right(())))
+
+  /** A stub that records every write but reports `error` for each one. */
+  def failingWith(error: SinkError): IO[StubSink] =
+    Ref.of[IO, Vector[TransportEnvelope]](Vector.empty).map(new StubSink(_, Left(error)))
+}

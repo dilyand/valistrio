@@ -1,7 +1,8 @@
 package valistrio.core.domain
 
 import cats.data.NonEmptyList
-import io.circe.{Decoder, DecodingFailure}
+import io.circe.{Decoder, DecodingFailure, Encoder, Json}
+import io.circe.syntax._
 
 /** The decoded contents of the envelope's "data" field. */
 final case class EnvelopeData(
@@ -56,5 +57,20 @@ object TransportEnvelope {
       schema <- c.downField("schema").as[SchemaName]
       data   <- c.downField("data").as[EnvelopeData]
     } yield TransportEnvelope(schema, data)
+  }
+
+  implicit val envelopeDataEncoder: Encoder[EnvelopeData] = Encoder.instance { data =>
+    Json.obj(
+      "meta"     -> data.meta.asJson,
+      "event"    -> data.event.asJson,
+      "contexts" -> data.contexts.map(_.toList).asJson
+    )
+  }
+
+  implicit val transportEnvelopeEncoder: Encoder[TransportEnvelope] = Encoder.instance { envelope =>
+    Json.obj(
+      "schema" -> envelope.schema.asJson,
+      "data"   -> envelope.data.asJson
+    )
   }
 }

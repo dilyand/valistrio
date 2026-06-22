@@ -13,7 +13,11 @@ Format: one entry per release, newest first. Each release lists its features; ch
 ### Features
 - **Integration test suite** — 9 tests running against the real shipped Docker image. Spins up Confluent Kafka (KRaft, no ZooKeeper) + Schema Registry 7.7.0 via Testcontainers, registers test schemas via the `SchemaRegistry` algebra, starts the Valistrio container with injected config, and makes real HTTP calls to verify the full stack end-to-end.
 
+### Features
+- **Kafka sink** — live `Sink[IO]` implementation (`valistrio.core.post.KafkaSink`) backed by `fs2-kafka`, writing validated envelopes to a configured topic keyed by `event_id`. Probes broker connectivity at startup so the app fails fast if Kafka is unreachable. Configurable via the new `kafka.bootstrapServers`/`kafka.topic` keys. Added `Encoder` instances for the envelope domain types and a `StubSink` for testing consumers of the algebra without a broker.
+
 ### Chores / Docs
+- Fixed `it/compile` — `modules/it`'s `scalaVersion` was left at `2.13.16` when `app`'s was bumped to `2.13.18` in the dependency audit (#8), which sbt 1.11's SIP-51 check rejects outright. Bumped to match.
 - Fixed broken `sbt compile`/`test` — the dependency audit bumped Confluent Schema Registry to `7.7.10` and JSON Schema Serializer to `7.4.15`, both of which pin a non-existent `jetty-bom` version (`9.4.61`/`9.4.59`, missing the `.vYYYYMMDD` qualifier) in their parent POM, making the whole build unresolvable. Pinned back to `7.7.6`/`7.4.12`, the last patch versions on each line with a valid `jetty-bom` reference.
 - Added the `Sink[F[_]]` algebra (`valistrio.core.post`) for writing validated envelopes to a downstream transport, plus `SinkError` and the DLQ envelope/truncation format documented in CLAUDE.md. No live implementation yet — that's the Kafka sink, tracked separately.
 - Added Confluent Schema Registry and networknt JSON Schema dependencies

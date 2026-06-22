@@ -2,6 +2,7 @@ package valistrio.core.domain
 
 import cats.data.NonEmptyList
 import io.circe.parser
+import io.circe.syntax._
 import org.specs2.mutable.Specification
 
 class TransportEnvelopeSpec extends Specification {
@@ -84,6 +85,20 @@ class TransportEnvelopeSpec extends Specification {
 
     "reject a bad envelope schema name" in {
       decode(s"""{"schema":"bad-schema","data":${envelopeData()}}""") must beLeft
+    }
+  }
+
+  "TransportEnvelope encoder" should {
+    "round-trip a decoded envelope without contexts" in {
+      decode(envelope(envelopeData())) must beRight.like { case te =>
+        parser.decode[TransportEnvelope](te.asJson.noSpaces) must beRight(te)
+      }
+    }
+
+    "round-trip a decoded envelope with contexts" in {
+      decode(envelope(envelopeData(contexts = Some(s"[$validContext]")))) must beRight.like { case te =>
+        parser.decode[TransportEnvelope](te.asJson.noSpaces) must beRight(te)
+      }
     }
   }
 }

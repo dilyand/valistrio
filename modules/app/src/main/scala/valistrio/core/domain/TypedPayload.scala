@@ -1,6 +1,7 @@
 package valistrio.core.domain
 
-import io.circe.{Decoder, DecodingFailure, Json}
+import io.circe.{Decoder, DecodingFailure, Encoder, Json}
+import io.circe.syntax._
 
 /** A self-describing payload: a schema reference paired with the data it describes.
   *
@@ -31,5 +32,12 @@ object TypedPayload {
         else Left(DecodingFailure("'data' must be a JSON object", c.downField("data").history))
       }
     } yield TypedPayload(schema, data)
+  }
+
+  implicit val encoder: Encoder[TypedPayload] = Encoder.instance { payload =>
+    Json.obj(
+      "schema" -> payload.schema.asJson,
+      "data"   -> payload.data
+    )
   }
 }

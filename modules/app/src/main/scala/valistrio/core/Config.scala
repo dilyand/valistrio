@@ -14,7 +14,7 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-final case class Config(server: ServerConfig, schemaRegistry: SchemaRegistryConfig)
+final case class Config(server: ServerConfig, schemaRegistry: SchemaRegistryConfig, kafka: KafkaConfig)
 
 object Config {
   implicit val configDecoder: Decoder[Config] = deriveDecoder[Config]
@@ -40,6 +40,11 @@ object Config {
   final case class SchemaRegistryConfig(url: String, timeoutMs: Int)
   object SchemaRegistryConfig {
     implicit val schemaRegistryConfigDecoder: Decoder[SchemaRegistryConfig] = deriveDecoder[SchemaRegistryConfig]
+  }
+
+  final case class KafkaConfig(bootstrapServers: String, topic: String)
+  object KafkaConfig {
+    implicit val kafkaConfigDecoder: Decoder[KafkaConfig] = deriveDecoder[KafkaConfig]
   }
 
   private val base64             = Base64.getDecoder

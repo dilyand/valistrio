@@ -8,6 +8,7 @@ lazy val versions = new {
   val circeConfig = "0.10.2"
   val pureConfig  = "0.17.10"
   val fs2         = "3.13.0"
+  val fs2Kafka    = "3.5.1"
   val scalaTest   = "3.2.19"
   val http4s      = "0.23.34"
   val logging     = "2.7.1"
@@ -38,6 +39,7 @@ lazy val deps = new {
   val pureConfig        = "com.github.pureconfig" %% "pureconfig"          % versions.pureConfig
   val fs2               = "co.fs2"                %% "fs2-core"            % versions.fs2
   val fs2io             = "co.fs2"                %% "fs2-io"              % versions.fs2
+  val fs2kafka          = "com.github.fd4s"       %% "fs2-kafka"           % versions.fs2Kafka
   val http4sEmberClient = "org.http4s"            %% "http4s-ember-client" % versions.http4s
   val http4sEmberServer = "org.http4s"            %% "http4s-ember-server" % versions.http4s
   val http4sDsl         = "org.http4s"            %% "http4s-dsl"          % versions.http4s
@@ -71,6 +73,7 @@ lazy val commonSettings = Seq(
     deps.pureConfig,
     deps.fs2,
     deps.fs2io,
+    deps.fs2kafka,
     deps.http4sCirce,
     deps.http4sDsl,
     deps.http4sEmberClient,
@@ -139,6 +142,7 @@ lazy val it = project
       deps.catsEffectTesting,
       deps.testcontainers,
       deps.testcontainersScala,
+      deps.fs2kafka,
       deps.http4sEmberClient,
       deps.logging,
       deps.slf4j,

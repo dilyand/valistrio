@@ -1,6 +1,6 @@
 package valistrio.core.domain
 
-import io.circe.Decoder
+import io.circe.{Decoder, Encoder, Json}
 
 /** Producer-supplied metadata for an event occurrence.
   *
@@ -22,5 +22,12 @@ object EventMeta {
       eventId    <- c.downField("event_id").as[String]
       producedAt <- c.downField("produced_at").as[String]
     } yield EventMeta(eventId, producedAt)
+  }
+
+  implicit val encoder: Encoder[EventMeta] = Encoder.instance { meta =>
+    Json.obj(
+      "event_id"    -> Json.fromString(meta.eventId),
+      "produced_at" -> Json.fromString(meta.producedAt)
+    )
   }
 }
