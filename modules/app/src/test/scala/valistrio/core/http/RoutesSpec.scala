@@ -11,7 +11,9 @@ import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
+import valistrio.core.ValistrioError.SinkError._
 import valistrio.core.domain.SchemaName
+import valistrio.core.post.{PostService, Sink, StubSink}
 import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
 class RoutesSpec extends Specification {
@@ -40,6 +42,18 @@ class RoutesSpec extends Specification {
 
   private def bodyJson(resp: Response[IO]): Json =
     parser.parse(resp.as[String].unsafeRunSync()).toOption.get
+
+  private def postApp(registry: SchemaRegistry[IO], sink: Sink[IO]): HttpApp[IO] =
+    Routes.post(new PostService(registry, sink)).orNotFound
+
+  private def postEnvelope(
+    body: String,
+    registry: SchemaRegistry[IO] = new StubSchemaRegistry(),
+    sink: Sink[IO] = StubSink.succeeding.unsafeRunSync()
+  ): Response[IO] = {
+    val req = Request[IO](method = Method.POST, uri = uri"/post").withEntity(body)
+    postApp(registry, sink).run(req).unsafeRunSync()
+  }
 
   // ---- Fixtures ----
 
@@ -152,6 +166,75 @@ class RoutesSpec extends Specification {
         eventSubject    -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.x", "bad"))))
       ))
       post(validEnvelope, stub).status must beEqualTo(Status.NotFound)
+    }
+  }
+
+  "POST /post" should {
+
+    // -- 200 OK --
+
+    "return 200 with written=true and write the envelope when validation succeeds" in {
+      val sink = StubSink.succeeding.unsafeRunSync()
+      val resp = postEnvelope(validEnvelope, sink = sink)
+      resp.status must beEqualTo(Status.Ok)
+      (bodyJson(resp) \\ "written").headOption must beSome(Json.True)
+      sink.written.unsafeRunSync() must haveSize(1)
+    }
+
+    // -- 400 Bad Request --
+
+    "return 400 for malformed JSON" in {
+      val resp = postEnvelope("not-json")
+      resp.status must beEqualTo(Status.BadRequest)
+      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
+      types must contain("malformed_json")
+    }
+
+    // -- 404 Not Found (validation failure, same as /validate) --
+
+    "return 404 when event schema is not in the registry" in {
+      val stub = new StubSchemaRegistry(
+        responses = Map("com.myorg/page_view/1.0.0" ->
+          Left(SchemaNotFound(SchemaName.parse("com.myorg/page_view/1.0.0").toOption.get)))
+      )
+      postEnvelope(validEnvelope, registry = stub).status must beEqualTo(Status.NotFound)
+    }
+
+    // -- 503 Service Unavailable --
+
+    "return 503 when the sink is unreachable" in {
+      val sink = StubSink.failingWith(Unavailable("connection refused")).unsafeRunSync()
+      val resp = postEnvelope(validEnvelope, sink = sink)
+      resp.status must beEqualTo(Status.ServiceUnavailable)
+      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
+      types must contain("sink_unavailable")
+    }
+
+    // -- 504 Gateway Timeout --
+
+    "return 504 when the sink times out" in {
+      val sink = StubSink.failingWith(Timeout).unsafeRunSync()
+      postEnvelope(validEnvelope, sink = sink).status must beEqualTo(Status.GatewayTimeout)
+    }
+
+    // -- 502 Bad Gateway --
+
+    "return 502 when the sink write fails for an unmapped reason" in {
+      val sink = StubSink.failingWith(WriteFailed("disk full")).unsafeRunSync()
+      val resp = postEnvelope(validEnvelope, sink = sink)
+      resp.status must beEqualTo(Status.BadGateway)
+      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
+      types must contain("sink_write_failed")
+    }
+
+    "does not write to the sink when validation fails" in {
+      val sink = StubSink.succeeding.unsafeRunSync()
+      val stub = new StubSchemaRegistry(
+        responses = Map("com.myorg/page_view/1.0.0" ->
+          Left(SchemaNotFound(SchemaName.parse("com.myorg/page_view/1.0.0").toOption.get)))
+      )
+      postEnvelope(validEnvelope, registry = stub, sink = sink)
+      sink.written.unsafeRunSync() must beEmpty
     }
   }
 }

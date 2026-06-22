@@ -49,7 +49,7 @@ class ValidateIntegrationSpec
   private val network        = Network.newNetwork()
   private val kafka          = new KafkaContainer(network)
   private val schemaRegistry = new SchemaRegistryContainer(network, kafka)
-  private val valistrio      = new ValistrioContainer(network, schemaRegistry.internalUrl)
+  private val valistrio      = new ValistrioContainer(network, schemaRegistry.internalUrl, kafka.internalBootstrap)
 
   // ---- Test schema ----
 

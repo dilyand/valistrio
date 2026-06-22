@@ -14,8 +14,13 @@ import java.util.Base64
   *
   * @param schemaRegistryInternalUrl SR URL reachable from inside the Docker network,
   *                                   e.g. `http://schema-registry:8081`
+  * @param kafkaInternalBootstrap    Kafka bootstrap address reachable from inside the
+  *                                   Docker network, e.g. `kafka:9092` — KafkaSink probes
+  *                                   connectivity at startup, so this must be reachable
+  *                                   or the container never becomes healthy.
   */
-class ValistrioContainer(network: Network, schemaRegistryInternalUrl: String) extends Container {
+class ValistrioContainer(network: Network, schemaRegistryInternalUrl: String, kafkaInternalBootstrap: String)
+    extends Container {
 
   val Port = 8080
 
@@ -24,7 +29,7 @@ class ValistrioContainer(network: Network, schemaRegistryInternalUrl: String) ex
     val c     = new JGenericContainer[Nothing](image)
     c.withNetwork(network)
     c.withNetworkAliases("valistrio")
-    c.withEnv(valistrio.core.Config.ValistrioConfigVar, configBlob(schemaRegistryInternalUrl))
+    c.withEnv(valistrio.core.Config.ValistrioConfigVar, configBlob(schemaRegistryInternalUrl, kafkaInternalBootstrap))
     c.waitingFor(Wait.forHttp("/health").forPort(Port).forStatusCode(200))
     c.withExposedPorts(Port)
     c
@@ -35,9 +40,13 @@ class ValistrioContainer(network: Network, schemaRegistryInternalUrl: String) ex
 
   // ---- Private ----
 
-  /** Produces the base64-encoded HOCON that overrides only the SR URL. */
-  private def configBlob(srUrl: String): String = {
-    val hocon = s"""valistrio { schemaRegistry { url = "$srUrl" } }"""
+  /** Produces the base64-encoded HOCON that overrides the SR URL and Kafka bootstrap. */
+  private def configBlob(srUrl: String, kafkaBootstrap: String): String = {
+    val hocon =
+      s"""valistrio {
+         |  schemaRegistry { url = "$srUrl" }
+         |  kafka { bootstrapServers = "$kafkaBootstrap" }
+         |}""".stripMargin
     Base64.getEncoder.encodeToString(hocon.getBytes(StandardCharsets.UTF_8))
   }
 }

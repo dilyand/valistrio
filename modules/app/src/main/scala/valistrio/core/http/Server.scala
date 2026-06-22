@@ -8,9 +8,10 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.ServerConfig
+import valistrio.core.post.{PostService, Sink}
 import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
-class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry[IO]) {
+class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry[IO], sink: Sink[IO]) {
   implicit val logger: org.typelevel.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
 
   def run: IO[Unit] =
@@ -22,7 +23,8 @@ class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry[IO]) {
 
   private def mkApp: HttpApp[IO] = {
     val validateService = new ValidateService(schemaRegistry)
-    val routes          = Routes.health <+> Routes.validate(validateService)
+    val postService     = new PostService(schemaRegistry, sink)
+    val routes          = Routes.health <+> Routes.validate(validateService) <+> Routes.post(postService)
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
@@ -41,7 +43,7 @@ class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry[IO]) {
       HttpApp[IO] { req =>
         app(req).flatMap { resp =>
           val p             = req.uri.path.renderString
-          val shouldDisable = p == "/health" || p == "/validate"
+          val shouldDisable = p == "/health" || p == "/validate" || p == "/post"
 
           if (shouldDisable) Caching.`no-store-response`[IO](resp)
           else IO.pure(resp)

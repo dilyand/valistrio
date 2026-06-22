@@ -121,17 +121,36 @@ Truncation: if the serialized `original` envelope exceeds `valistrio.server.maxB
 `null` and `original_truncated: true` is added alongside it — the DLQ record always fits within the same
 size limit enforced on inbound requests, and oversized payloads are never silently dropped without a trace.
 
-## POST /post (service layer)
+## POST /post
 
 `valistrio.core.post.PostService` orchestrates the write path: parse → decode → validate (delegates to
-`ValidateService`) → write to `Sink`. No HTTP route is wired up yet (tracked separately) — this is the
-service layer only.
+`ValidateService`) → write to `Sink`.
 
-Response shape (`PostResponse`), mirroring `ValidateResponse`:
+**Request**: `Content-Type: application/json`, body is the same envelope JSON used by `/validate`.
 
+**Success response** (`200 OK`):
 ```json
 { "written": true }
 ```
+
+### Error types and HTTP status
+
+| HTTP | `type` | `recoverable` | Cause |
+|---|---|---|---|
+| 400 | `malformed_json` | false | Body is not valid JSON |
+| 400 | `structural_decode_error` | false | Envelope shape is wrong |
+| 404 | `schema_not_found` | true | No schema registered under the given name |
+| 422 | `schema_validation_failed` | true | Payload data fails schema validation |
+| 503 | `schema_registry_unavailable` | true | Schema Registry cannot be reached |
+| 503 | `sink_unavailable` | true | Kafka broker cannot be reached |
+| 504 | `schema_registry_timeout` | true | Schema Registry did not respond in time |
+| 504 | `sink_timeout` | true | Kafka write timed out |
+| 502 | `sink_write_failed` | true | Kafka write failed for any other reason |
+
+Same error-collection and recoverability conventions as `/validate` (see above). Validation runs in full
+before any write is attempted — a write is only attempted once validation succeeds.
+
+**Error response**:
 ```json
 {
   "written": false,
@@ -141,10 +160,7 @@ Response shape (`PostResponse`), mirroring `ValidateResponse`:
 }
 ```
 
-`errors` entries share the same `type`/`recoverable`/`path`/`message` shape used by `/validate`. Validation
-failures surface the same error types as `/validate` (`malformed_json`, `structural_decode_error`,
-`schema_not_found`, etc.); sink failures add `sink_unavailable`, `sink_timeout`, `sink_write_failed` — all
-currently treated as recoverable (retry once the underlying Kafka issue is fixed).
+`errors` entries share the same `type`/`recoverable`/`path`/`message` shape used by `/validate`.
 
 `meta.event_id` is the idempotency key for the written record (used as the Kafka record key by `KafkaSink`).
 Deduplicating repeated `event_id`s is the sink's responsibility for 0.1.0 — `PostService` does not itself
