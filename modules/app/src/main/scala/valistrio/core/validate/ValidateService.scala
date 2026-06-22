@@ -22,18 +22,15 @@ import valistrio.core.domain.{SchemaName, TransportEnvelope, TypedPayload}
 class ValidateService(registry: SchemaRegistry[IO]) {
 
   def validate(rawBody: String): IO[ValidateResponse] =
-    parser.parse(rawBody) match {
-      case Left(err)   => IO.pure(failure(MalformedJson(err.message)))
-      case Right(json) =>
-        json.as[TransportEnvelope] match {
-          case Left(err)       => IO.pure(failure(StructuralDecodeError(err.message)))
-          case Right(envelope) => validateAll(json, envelope)
-        }
+    ValidateService.parseAndDecode(rawBody) match {
+      case Left(err)               => IO.pure(failure(err))
+      case Right((json, envelope)) => validateAll(json, envelope)
     }
 
-  // ---- Private ----
-
-  private def validateAll(json: Json, envelope: TransportEnvelope): IO[ValidateResponse] = {
+  /** Validates an already-decoded envelope against the registry, reusable by callers
+    * (e.g. the /post service) that have already parsed and decoded the body themselves.
+    */
+  def validateAll(json: Json, envelope: TransportEnvelope): IO[ValidateResponse] = {
     val contexts: List[TypedPayload] =
       envelope.data.contexts.fold(List.empty[TypedPayload])(_.toList)
 
@@ -62,4 +59,14 @@ object ValidateService {
   private[validate] val EnvelopeSchemaName: SchemaName =
     SchemaName.parse("com.valistrio/envelope/1.0.0")
       .getOrElse(throw new IllegalStateException("Invalid built-in schema name"))
+
+  /** Parses the raw body as JSON and decodes it into a [[TransportEnvelope]].
+    *
+    * Shared by [[ValidateService.validate]] and the /post service, so both
+    * short-circuit on the same [[MalformedJson]]/[[StructuralDecodeError]] errors.
+    */
+  def parseAndDecode(rawBody: String): Either[ValidateError, (Json, TransportEnvelope)] =
+    parser.parse(rawBody).left.map(err => MalformedJson(err.message): ValidateError).flatMap { json =>
+      json.as[TransportEnvelope].left.map(err => StructuralDecodeError(err.message): ValidateError).map(env => (json, env))
+    }
 }

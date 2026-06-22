@@ -121,6 +121,35 @@ Truncation: if the serialized `original` envelope exceeds `valistrio.server.maxB
 `null` and `original_truncated: true` is added alongside it — the DLQ record always fits within the same
 size limit enforced on inbound requests, and oversized payloads are never silently dropped without a trace.
 
+## POST /post (service layer)
+
+`valistrio.core.post.PostService` orchestrates the write path: parse → decode → validate (delegates to
+`ValidateService`) → write to `Sink`. No HTTP route is wired up yet (tracked separately) — this is the
+service layer only.
+
+Response shape (`PostResponse`), mirroring `ValidateResponse`:
+
+```json
+{ "written": true }
+```
+```json
+{
+  "written": false,
+  "errors": [
+    { "type": "sink_write_failed", "recoverable": true, "message": "<cause>" }
+  ]
+}
+```
+
+`errors` entries share the same `type`/`recoverable`/`path`/`message` shape used by `/validate`. Validation
+failures surface the same error types as `/validate` (`malformed_json`, `structural_decode_error`,
+`schema_not_found`, etc.); sink failures add `sink_unavailable`, `sink_timeout`, `sink_write_failed` — all
+currently treated as recoverable (retry once the underlying Kafka issue is fixed).
+
+`meta.event_id` is the idempotency key for the written record (used as the Kafka record key by `KafkaSink`).
+Deduplicating repeated `event_id`s is the sink's responsibility for 0.1.0 — `PostService` does not itself
+check for or reject duplicates.
+
 ## GET /health
 
 Returns `200 OK` with body `ok`. No authentication required. Used as a liveness check.
