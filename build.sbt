@@ -90,6 +90,8 @@ lazy val commonSettings = Seq(
 // Fixed tag used by both the Docker build and ValistrioContainer
 val DockerImageTag = "it"
 
+val javaVersion = IO.read(file(".java-version")).trim
+
 lazy val app = project
   .in(file("modules/app"))
   .enablePlugins(sbt.plugins.JvmPlugin, JavaAppPackaging, DockerPlugin, BuildInfoPlugin)
@@ -98,7 +100,7 @@ lazy val app = project
     // Docker
     Docker / packageName    := "valistrio",
     Docker / version        := DockerImageTag,
-    dockerBaseImage         := "eclipse-temurin:17-jre-jammy",
+    dockerBaseImage         := s"eclipse-temurin:$javaVersion-jre-jammy",
     dockerExposedPorts      := Seq(8080),
     dockerUpdateLatest      := false,
     // BuildInfo — exposes image coordinates to the IT module
