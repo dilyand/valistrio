@@ -120,20 +120,20 @@ lazy val it = project
     publish / skip                := true,
     Global / lintUnusedKeysOnLoad := false,
     Test / fork                   := true,
-    // On macOS, Docker Desktop 29+ has minimum API version 1.40 but docker-java
+    // On macOS, Docker Desktop 29+ has minimum API version 1.44 but docker-java
     // (bundled with Testcontainers) defaults to v1.26, causing 400 responses.
     // We fix this with a JVM system property (docker-java reads api.version) and
     // an env var so Testcontainers itself also sees the right version.
     Test / javaOptions            ++= Seq(
-      "-Dapi.version=1.41",
-      "-DDOCKER_API_VERSION=1.41",
+      "-Dapi.version=1.44",
+      "-DDOCKER_API_VERSION=1.44",
       s"-DDOCKER_HOST=unix:///var/run/docker.sock"
     ),
     Test / envVars                ++= {
       val host = sys.env.getOrElse("DOCKER_HOST", "unix:///var/run/docker.sock")
       Map(
         "DOCKER_HOST"                          -> host,
-        "DOCKER_API_VERSION"                   -> "1.41",
+        "DOCKER_API_VERSION"                   -> "1.44",
         "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE" -> "/var/run/docker.sock"
       )
     },
