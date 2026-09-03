@@ -201,3 +201,12 @@ Example — override the Schema Registry URL:
 ```bash
 export VALISTRIO_CONFIG=$(echo 'valistrio { schemaRegistry { url = "http://my-registry:8081" } }' | base64)
 ```
+
+---
+
+## Releases
+
+Releases are cut by pushing an annotated `vX.Y.Z` tag; the version is derived from the
+tag via sbt-dynver (there is no version file), and a tag push publishes the image to
+GHCR and creates a GitHub Release. See `docs/releasing.md` for the full runbook.
+
