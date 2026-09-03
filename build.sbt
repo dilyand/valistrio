@@ -60,6 +60,7 @@ lazy val deps = new {
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.18",
+  organization := "io.github.dilyand",
   resolvers += "Confluent" at "https://packages.confluent.io/maven/",
   Compile / mainClass := Some("valistrio.Main"),
   Global  / lintUnusedKeysOnLoad := false,
@@ -87,8 +88,11 @@ lazy val commonSettings = Seq(
   )
 )
 
-// Fixed tag used by both the Docker build and ValistrioContainer
+// Fixed tag used by both the Docker build and ValistrioContainer.
+// The release workflow sets VALISTRIO_RELEASE=true to publish the version-tagged
+// GHCR image instead; local builds and the IT suite stay on valistrio:it.
 val DockerImageTag = "it"
+val isRelease      = sys.env.get("VALISTRIO_RELEASE").contains("true")
 
 val javaVersion = IO.read(file(".java-version")).trim
 
@@ -99,15 +103,17 @@ lazy val app = project
     commonSettings,
     // Docker
     Docker / packageName    := "valistrio",
-    Docker / version        := DockerImageTag,
+    Docker / version        := (if (isRelease) version.value else DockerImageTag),
+    dockerRepository        := (if (isRelease) Some("ghcr.io/dilyand") else None),
     dockerBaseImage         := s"eclipse-temurin:$javaVersion-jre-jammy",
     dockerExposedPorts      := Seq(8080),
-    dockerUpdateLatest      := false,
-    // BuildInfo — exposes image coordinates to the IT module
+    dockerUpdateLatest      := isRelease,
+    // BuildInfo — exposes image coordinates to the IT module, derived from the
+    // Docker settings so the IT container and the published image never drift.
     buildInfoPackage        := "valistrio",
     buildInfoKeys           := Seq[BuildInfoKey](
-      BuildInfoKey.action("dockerImageName") { "valistrio" },
-      BuildInfoKey.action("dockerImageTag")  { DockerImageTag }
+      BuildInfoKey("dockerImageName" -> (Docker / packageName).value),
+      BuildInfoKey("dockerImageTag"  -> (Docker / version).value)
     )
   )
 
