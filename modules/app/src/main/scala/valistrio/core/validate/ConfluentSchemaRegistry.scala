@@ -13,7 +13,7 @@ import org.typelevel.log4cats.Logger
 import valistrio.core.Config.SchemaRegistryConfig
 import valistrio.core.ValistrioError.{ValidateError, ValidationError}
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.SchemaRef
+import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
 import java.util.concurrent.TimeoutException
 import scala.concurrent.duration._
@@ -59,10 +59,9 @@ object ConfluentSchemaRegistry {
   private class LiveSchemaRegistry(client: SchemaRegistryClient, timeout: FiniteDuration)
       extends SchemaRegistry[IO] {
 
-    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] = {
-      val subject = name.toString
-      withTimeout(subject, IO.blocking {
-        val rawSchema  = client.getLatestSchemaMetadata(subject).getSchema
+    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
+      withTimeout(name, IO.blocking {
+        val rawSchema  = client.getLatestSchemaMetadata(name.toString).getSchema
         val schemaNode = mapper.readTree(rawSchema)
         val schema     = networkntFactory.getSchema(schemaNode)
         val dataNode   = mapper.readTree(data.noSpaces)
@@ -76,7 +75,6 @@ object ConfluentSchemaRegistry {
           Left(ValidationFailed(errors))
         case Left(err) => Left(err)
       }
-    }
 
     def register(name: SchemaRef, schemaJson: String): IO[Unit] = {
       val subject = name.toString
@@ -86,7 +84,7 @@ object ConfluentSchemaRegistry {
       }.void
     }
 
-    private def withTimeout[A](subject: String, action: IO[A]): IO[Either[ValidateError, A]] =
+    private def withTimeout[A](name: SchemaRef, action: IO[A]): IO[Either[ValidateError, A]] =
       action
         .timeout(timeout)
         .map(Right(_): Either[ValidateError, A])
@@ -94,29 +92,24 @@ object ConfluentSchemaRegistry {
           case _: TimeoutException =>
             IO.pure(Left(SchemaRegistryTimeout))
           case e: RestClientException =>
-            IO.pure(Left(mapRestClientException(e, subject)))
+            IO.pure(Left(mapRestClientException(e, name)))
           case e: Exception =>
             IO.pure(Left(SchemaRegistryUnavailable(e.getMessage)))
         }
 
-    private def mapRestClientException(e: RestClientException, subject: String): ValidateError =
+    private def mapRestClientException(e: RestClientException, name: SchemaRef): ValidateError =
       e.getStatus match {
-        case 404 => SchemaNotFound(SchemaRef.parse(subject).getOrElse(
-          // subject is always a valid SchemaRef.toString at this point
-          throw new IllegalStateException(s"Unparseable subject: $subject")
-        ))
-        case 408                => SchemaRegistryTimeout
-        case 503 | 504          => SchemaRegistryUnavailable(e.getMessage)
-        case _                  => SchemaRegistryUnavailable(e.getMessage)
+        case 404       => SchemaNotFound(name)
+        case 408       => SchemaRegistryTimeout
+        case 503 | 504 => SchemaRegistryUnavailable(e.getMessage)
+        case _         => SchemaRegistryUnavailable(e.getMessage)
       }
   }
 
   // ---- Startup seeding ----
 
   private val OwnedSchemas: List[SchemaRef] = List(
-    SchemaRef.parse("com.valistrio/envelope/1.0.0").getOrElse(
-      throw new IllegalStateException("Invalid built-in schema name")
-    )
+    SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0))
   )
 
   private def loadSchemaJson(name: SchemaRef): IO[String] = {

@@ -1,8 +1,11 @@
 package valistrio.core.domain
 
+import cats.data.ValidatedNel
+import cats.syntax.apply._
+import cats.syntax.validated._
 import io.circe.{Decoder, Encoder}
 
-/** A fully qualified schema name of the form "group/name/version",
+/** A fully qualified schema reference of the form "group/name/version",
   * e.g. "com.myorg/page_view/1.0.0".
   */
 final case class SchemaRef(group: String, name: String, version: SchemaVersion) {
@@ -18,43 +21,36 @@ object SchemaRef {
     *
     * Rules:
     *  - exactly two '/' separators
-    *  - group: reverse-domain style, lowercase letters and digits, dot-separated,
-    *    no empty segments (e.g. "com.myorg")
+    *  - group: reverse-domain style, lowercase letters and digits, dot-separated
     *  - name: lowercase snake_case (e.g. "page_view")
     *  - version: delegated to [[SchemaVersion.parse]]
+    *
+    * Once the three parts are present, group, name and version are parsed
+    * independently so all faults are reported together.
     */
-  def parse(s: String): Either[String, SchemaRef] =
+  def parse(s: String): ValidatedNel[String, SchemaRef] =
     s.split('/') match {
       case Array(group, name, version) =>
-        for {
-          _ <- validateGroup(group, s)
-          _ <- validateName(name, s)
-          v <- SchemaVersion.parse(version).left.map(err => s"In schema '$s': $err")
-        } yield SchemaRef(group, name, v)
+        (parseGroup(group, s), parseName(name, s), parseVersion(version, s)).mapN(SchemaRef.apply)
       case parts =>
-        Left(
-          s"Schema name '$s' must have the form 'group/name/version' (exactly two '/' separators), got ${parts.length - 1}."
-        )
+        s"Schema name '$s' must have the form 'group/name/version' (exactly two '/' separators), got ${parts.length - 1}.".invalidNel
     }
 
-  private def validateGroup(group: String, full: String): Either[String, Unit] =
-    if (GroupPattern.pattern.matcher(group).matches())
-      Right(())
+  private def parseGroup(group: String, full: String): ValidatedNel[String, String] =
+    if (GroupPattern.pattern.matcher(group).matches()) group.validNel
     else
-      Left(
-        s"In schema '$full': group '$group' must be reverse-domain style with lowercase letters and digits (e.g. 'com.myorg')."
-      )
+      s"In schema '$full': group '$group' must be reverse-domain style with lowercase letters and digits (e.g. 'com.myorg').".invalidNel
 
-  private def validateName(name: String, full: String): Either[String, Unit] =
-    if (NamePattern.pattern.matcher(name).matches())
-      Right(())
+  private def parseName(name: String, full: String): ValidatedNel[String, String] =
+    if (NamePattern.pattern.matcher(name).matches()) name.validNel
     else
-      Left(
-        s"In schema '$full': name '$name' must be lowercase snake_case (e.g. 'page_view')."
-      )
+      s"In schema '$full': name '$name' must be lowercase snake_case (e.g. 'page_view').".invalidNel
+
+  private def parseVersion(version: String, full: String): ValidatedNel[String, SchemaVersion] =
+    SchemaVersion.parse(version).leftMap(_.map(err => s"In schema '$full': $err"))
 
   implicit val decoder: Decoder[SchemaRef] =
-    Decoder[String].emap(parse)
+    Decoder[String].emap(s => parse(s).toEither.left.map(_.toList.mkString("; ")))
 
   implicit val encoder: Encoder[SchemaRef] =
     Encoder[String].contramap(_.toString)

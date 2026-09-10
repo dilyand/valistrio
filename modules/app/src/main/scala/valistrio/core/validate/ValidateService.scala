@@ -7,7 +7,7 @@ import io.circe.Json
 import io.circe.parser
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{SchemaRef, Event, TypedData}
+import valistrio.core.domain.{SchemaRef, SchemaVersion, Event, TypedData}
 
 /** Orchestrates the full /validate request flow.
   *
@@ -57,8 +57,7 @@ class ValidateService(registry: SchemaRegistry[IO]) {
 
 object ValidateService {
   private[validate] val EnvelopeSchemaName: SchemaRef =
-    SchemaRef.parse("com.valistrio/envelope/1.0.0")
-      .getOrElse(throw new IllegalStateException("Invalid built-in schema name"))
+    SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0))
 
   /** Parses the raw body as JSON and decodes it into a [[Event]].
     *
