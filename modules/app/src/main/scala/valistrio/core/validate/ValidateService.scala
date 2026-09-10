@@ -7,13 +7,13 @@ import io.circe.Json
 import io.circe.parser
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{SchemaName, TransportEnvelope, TypedPayload}
+import valistrio.core.domain.{SchemaRef, Event, TypedData}
 
 /** Orchestrates the full /validate request flow.
   *
   * Validation phases:
   *  1. Parse raw body as JSON         — [[MalformedJson]] on failure (non-recoverable, short-circuits)
-  *  2. Decode into TransportEnvelope  — [[StructuralDecodeError]] on failure (non-recoverable, short-circuits)
+  *  2. Decode into Event  — [[StructuralDecodeError]] on failure (non-recoverable, short-circuits)
   *  3. Validate in parallel (errors collected, never short-circuited):
   *     a. Envelope JSON against `com.valistrio/envelope/1.0.0`
   *     b. `event.data` against `event.schema`
@@ -30,9 +30,9 @@ class ValidateService(registry: SchemaRegistry[IO]) {
   /** Validates an already-decoded envelope against the registry, reusable by callers
     * (e.g. the /post service) that have already parsed and decoded the body themselves.
     */
-  def validateAll(json: Json, envelope: TransportEnvelope): IO[ValidateResponse] = {
-    val contexts: List[TypedPayload] =
-      envelope.data.contexts.fold(List.empty[TypedPayload])(_.toList)
+  def validateAll(json: Json, envelope: Event): IO[ValidateResponse] = {
+    val contexts: List[TypedData] =
+      envelope.data.contexts.fold(List.empty[TypedData])(_.toList)
 
     val tasks: List[IO[Either[ValidateError, Unit]]] =
       registry.validate(ValidateService.EnvelopeSchemaName, json) ::
@@ -56,17 +56,17 @@ class ValidateService(registry: SchemaRegistry[IO]) {
 }
 
 object ValidateService {
-  private[validate] val EnvelopeSchemaName: SchemaName =
-    SchemaName.parse("com.valistrio/envelope/1.0.0")
+  private[validate] val EnvelopeSchemaName: SchemaRef =
+    SchemaRef.parse("com.valistrio/envelope/1.0.0")
       .getOrElse(throw new IllegalStateException("Invalid built-in schema name"))
 
-  /** Parses the raw body as JSON and decodes it into a [[TransportEnvelope]].
+  /** Parses the raw body as JSON and decodes it into a [[Event]].
     *
     * Shared by [[ValidateService.validate]] and the /post service, so both
     * short-circuit on the same [[MalformedJson]]/[[StructuralDecodeError]] errors.
     */
-  def parseAndDecode(rawBody: String): Either[ValidateError, (Json, TransportEnvelope)] =
+  def parseAndDecode(rawBody: String): Either[ValidateError, (Json, Event)] =
     parser.parse(rawBody).left.map(err => MalformedJson(err.message): ValidateError).flatMap { json =>
-      json.as[TransportEnvelope].left.map(err => StructuralDecodeError(err.message): ValidateError).map(env => (json, env))
+      json.as[Event].left.map(err => StructuralDecodeError(err.message): ValidateError).map(env => (json, env))
     }
 }

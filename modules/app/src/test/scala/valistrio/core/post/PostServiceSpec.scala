@@ -10,7 +10,7 @@ import valistrio.core.ValistrioError.SinkError._
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 import valistrio.core.validate.SchemaRegistry
 
 class PostServiceSpec extends Specification {
@@ -21,9 +21,9 @@ class PostServiceSpec extends Specification {
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
   ) extends SchemaRegistry[IO] {
-    def validate(name: SchemaName, data: Json): IO[Either[ValidateError, Unit]] =
+    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
       IO.pure(responses.getOrElse(name.toString, default))
-    def register(name: SchemaName, schemaJson: String): IO[Unit] = IO.unit
+    def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
   }
 
   private def stubOk = new StubSchemaRegistry()
@@ -83,7 +83,7 @@ class PostServiceSpec extends Specification {
 
     "return validation Failure and not write when the event schema is not registered" in {
       val sink = StubSink.succeeding.unsafeRunSync()
-      val registry = stubFor(eventSubject, Left(SchemaNotFound(SchemaName.parse(eventSubject).toOption.get)))
+      val registry = stubFor(eventSubject, Left(SchemaNotFound(SchemaRef.parse(eventSubject).toOption.get)))
       val resp = run(registry, sink, validEnvelope)
 
       errorTypes(resp) must contain("schema_not_found")

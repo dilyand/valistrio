@@ -8,7 +8,7 @@ import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 
 class ValidateServiceSpec extends Specification {
 
@@ -22,9 +22,9 @@ class ValidateServiceSpec extends Specification {
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
   ) extends SchemaRegistry[IO] {
-    def validate(name: SchemaName, data: Json): IO[Either[ValidateError, Unit]] =
+    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
       IO.pure(responses.getOrElse(name.toString, default))
-    def register(name: SchemaName, schemaJson: String): IO[Unit] = IO.unit
+    def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
   }
 
   private def stubOk  = new StubSchemaRegistry()
@@ -120,7 +120,7 @@ class ValidateServiceSpec extends Specification {
 
     "return Failure(schema_not_found) when event schema is not in the registry" in {
       val svc = new ValidateService(stubFor(eventSubject, Left(SchemaNotFound(
-        SchemaName.parse(eventSubject).toOption.get
+        SchemaRef.parse(eventSubject).toOption.get
       ))))
       errorTypes(run(svc, validEnvelope)) must contain("schema_not_found")
     }
@@ -177,7 +177,7 @@ class ValidateServiceSpec extends Specification {
 
     "collect errors from envelope validation and event validation simultaneously" in {
       val envelopeErr = SchemaNotFound(ValidateService.EnvelopeSchemaName)
-      val eventErr    = SchemaNotFound(SchemaName.parse(eventSubject).toOption.get)
+      val eventErr    = SchemaNotFound(SchemaRef.parse(eventSubject).toOption.get)
       val stub = new StubSchemaRegistry(responses = Map(
         envelopeSubject -> Left(envelopeErr),
         eventSubject    -> Left(eventErr)

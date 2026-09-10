@@ -5,11 +5,11 @@ import io.circe.{Decoder, Encoder}
 /** A fully qualified schema name of the form "group/name/version",
   * e.g. "com.myorg/page_view/1.0.0".
   */
-final case class SchemaName(group: String, name: String, version: SchemaVersion) {
+final case class SchemaRef(group: String, name: String, version: SchemaVersion) {
   override def toString: String = s"$group/$name/$version"
 }
 
-object SchemaName {
+object SchemaRef {
 
   private val GroupPattern = "[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*".r
   private val NamePattern  = "[a-z][a-z0-9_]*".r
@@ -23,14 +23,14 @@ object SchemaName {
     *  - name: lowercase snake_case (e.g. "page_view")
     *  - version: delegated to [[SchemaVersion.parse]]
     */
-  def parse(s: String): Either[String, SchemaName] =
+  def parse(s: String): Either[String, SchemaRef] =
     s.split('/') match {
       case Array(group, name, version) =>
         for {
           _ <- validateGroup(group, s)
           _ <- validateName(name, s)
           v <- SchemaVersion.parse(version).left.map(err => s"In schema '$s': $err")
-        } yield SchemaName(group, name, v)
+        } yield SchemaRef(group, name, v)
       case parts =>
         Left(
           s"Schema name '$s' must have the form 'group/name/version' (exactly two '/' separators), got ${parts.length - 1}."
@@ -53,9 +53,9 @@ object SchemaName {
         s"In schema '$full': name '$name' must be lowercase snake_case (e.g. 'page_view')."
       )
 
-  implicit val decoder: Decoder[SchemaName] =
+  implicit val decoder: Decoder[SchemaRef] =
     Decoder[String].emap(parse)
 
-  implicit val encoder: Encoder[SchemaName] =
+  implicit val encoder: Encoder[SchemaRef] =
     Encoder[String].contramap(_.toString)
 }

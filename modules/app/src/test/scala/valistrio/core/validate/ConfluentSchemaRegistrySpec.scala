@@ -3,7 +3,7 @@ package valistrio.core.validate
 import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{SchemaName, SchemaVersion}
+import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
 /** Unit tests for the pure logic in ConfluentSchemaRegistry.
   *
@@ -17,13 +17,13 @@ class ConfluentSchemaRegistrySpec extends Specification {
   // We test by verifying the algebra contract on a stub implementation.
 
   "SchemaRegistry subject naming" should {
-    "use SchemaName.toString as the Confluent subject" in {
-      val name = SchemaName("com.myorg", "page_view", SchemaVersion(1, 0, 0))
+    "use SchemaRef.toString as the Confluent subject" in {
+      val name = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))
       name.toString must beEqualTo("com.myorg/page_view/1.0.0")
     }
 
     "produce a stable subject for Valistrio-owned schemas" in {
-      val name = SchemaName("com.valistrio", "envelope", SchemaVersion(1, 0, 0))
+      val name = SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0))
       name.toString must beEqualTo("com.valistrio/envelope/1.0.0")
     }
   }
@@ -36,7 +36,7 @@ class ConfluentSchemaRegistrySpec extends Specification {
     }
 
     "SchemaNotFound is recoverable (ops-side)" in {
-      val name = SchemaName("com.myorg", "user", SchemaVersion(1, 0, 0))
+      val name = SchemaRef("com.myorg", "user", SchemaVersion(1, 0, 0))
       val e: ValidateError = SchemaNotFound(name)
       e must beAnInstanceOf[SchemaNotFound]
     }

@@ -14,21 +14,21 @@ import valistrio.core.domain._
   */
 class KafkaSinkSpec extends Specification {
 
-  private val envelope = TransportEnvelope(
-    SchemaName("com.valistrio", "envelope", SchemaVersion(1, 0, 0)),
-    EnvelopeData(
+  private val envelope = Event(
+    SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0)),
+    EventData(
       EventMeta("018f1e2a-dead-beef-cafe-000000000000", "2026-06-08T12:00:00Z"),
-      TypedPayload(
-        SchemaName("com.myorg", "page_view", SchemaVersion(1, 0, 0)),
+      TypedData(
+        SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0)),
         io.circe.Json.obj("page_url" -> io.circe.Json.fromString("https://example.com"))
       ),
-      None: Option[NonEmptyList[TypedPayload]]
+      None: Option[NonEmptyList[TypedData]]
     )
   )
 
   "Envelope serialization" should {
     "produce JSON that decodes back to an equivalent envelope" in {
-      parser.decode[TransportEnvelope](envelope.asJson.noSpaces) must beRight(envelope)
+      parser.decode[Event](envelope.asJson.noSpaces) must beRight(envelope)
     }
   }
 

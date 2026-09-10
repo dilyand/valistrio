@@ -13,7 +13,7 @@ import org.typelevel.log4cats.Logger
 import valistrio.core.Config.SchemaRegistryConfig
 import valistrio.core.ValistrioError.{ValidateError, ValidationError}
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 
 import java.util.concurrent.TimeoutException
 import scala.concurrent.duration._
@@ -59,7 +59,7 @@ object ConfluentSchemaRegistry {
   private class LiveSchemaRegistry(client: SchemaRegistryClient, timeout: FiniteDuration)
       extends SchemaRegistry[IO] {
 
-    def validate(name: SchemaName, data: Json): IO[Either[ValidateError, Unit]] = {
+    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] = {
       val subject = name.toString
       withTimeout(subject, IO.blocking {
         val rawSchema  = client.getLatestSchemaMetadata(subject).getSchema
@@ -78,7 +78,7 @@ object ConfluentSchemaRegistry {
       }
     }
 
-    def register(name: SchemaName, schemaJson: String): IO[Unit] = {
+    def register(name: SchemaRef, schemaJson: String): IO[Unit] = {
       val subject = name.toString
       IO.blocking {
         val schema = new JsonSchema(schemaJson)
@@ -101,8 +101,8 @@ object ConfluentSchemaRegistry {
 
     private def mapRestClientException(e: RestClientException, subject: String): ValidateError =
       e.getStatus match {
-        case 404 => SchemaNotFound(SchemaName.parse(subject).getOrElse(
-          // subject is always a valid SchemaName.toString at this point
+        case 404 => SchemaNotFound(SchemaRef.parse(subject).getOrElse(
+          // subject is always a valid SchemaRef.toString at this point
           throw new IllegalStateException(s"Unparseable subject: $subject")
         ))
         case 408                => SchemaRegistryTimeout
@@ -113,13 +113,13 @@ object ConfluentSchemaRegistry {
 
   // ---- Startup seeding ----
 
-  private val OwnedSchemas: List[SchemaName] = List(
-    SchemaName.parse("com.valistrio/envelope/1.0.0").getOrElse(
+  private val OwnedSchemas: List[SchemaRef] = List(
+    SchemaRef.parse("com.valistrio/envelope/1.0.0").getOrElse(
       throw new IllegalStateException("Invalid built-in schema name")
     )
   )
 
-  private def loadSchemaJson(name: SchemaName): IO[String] = {
+  private def loadSchemaJson(name: SchemaRef): IO[String] = {
     val path = s"/schemas/${name.group}/${name.name}/${name.version}.json"
     IO {
       val stream = getClass.getResourceAsStream(path)

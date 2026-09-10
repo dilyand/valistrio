@@ -5,7 +5,7 @@ import io.circe.syntax._
 import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.{ValidateError, ValidationError}
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{SchemaName, SchemaVersion}
+import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
 class ValidateResponseSpec extends Specification {
 
@@ -53,7 +53,7 @@ class ValidateResponseSpec extends Specification {
     }
 
     "map SchemaNotFound to a recoverable entry" in {
-      val name   = SchemaName("com.myorg", "page_view", SchemaVersion(1, 0, 0))
+      val name   = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))
       val errors = ValidateResponseError.from(SchemaNotFound(name))
       errors.head.`type` must beEqualTo("schema_not_found")
       errors.head.recoverable must beTrue

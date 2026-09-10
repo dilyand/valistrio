@@ -12,7 +12,7 @@ import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.ValistrioError.SinkError._
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 import valistrio.core.post.{PostService, Sink, StubSink}
 import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
@@ -24,9 +24,9 @@ class RoutesSpec extends Specification {
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
   ) extends SchemaRegistry[IO] {
-    def validate(name: SchemaName, data: Json): IO[Either[ValidateError, Unit]] =
+    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
       IO.pure(responses.getOrElse(name.toString, default))
-    def register(name: SchemaName, schemaJson: String): IO[Unit] = IO.unit
+    def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
   }
 
   // ---- Helpers ----
@@ -100,7 +100,7 @@ class RoutesSpec extends Specification {
     "return 404 when event schema is not in the registry" in {
       val stub = new StubSchemaRegistry(
         responses = Map("com.myorg/page_view/1.0.0" ->
-          Left(SchemaNotFound(SchemaName.parse("com.myorg/page_view/1.0.0").toOption.get)))
+          Left(SchemaNotFound(SchemaRef.parse("com.myorg/page_view/1.0.0").toOption.get)))
       )
       val resp = post(validEnvelope, stub)
       resp.status must beEqualTo(Status.NotFound)
@@ -162,7 +162,7 @@ class RoutesSpec extends Specification {
       val envelopeSubject = "com.valistrio/envelope/1.0.0"
       val eventSubject    = "com.myorg/page_view/1.0.0"
       val stub = new StubSchemaRegistry(responses = Map(
-        envelopeSubject -> Left(SchemaNotFound(SchemaName.parse(envelopeSubject).toOption.get)),
+        envelopeSubject -> Left(SchemaNotFound(SchemaRef.parse(envelopeSubject).toOption.get)),
         eventSubject    -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.x", "bad"))))
       ))
       post(validEnvelope, stub).status must beEqualTo(Status.NotFound)
@@ -195,7 +195,7 @@ class RoutesSpec extends Specification {
     "return 404 when event schema is not in the registry" in {
       val stub = new StubSchemaRegistry(
         responses = Map("com.myorg/page_view/1.0.0" ->
-          Left(SchemaNotFound(SchemaName.parse("com.myorg/page_view/1.0.0").toOption.get)))
+          Left(SchemaNotFound(SchemaRef.parse("com.myorg/page_view/1.0.0").toOption.get)))
       )
       postEnvelope(validEnvelope, registry = stub).status must beEqualTo(Status.NotFound)
     }
@@ -231,7 +231,7 @@ class RoutesSpec extends Specification {
       val sink = StubSink.succeeding.unsafeRunSync()
       val stub = new StubSchemaRegistry(
         responses = Map("com.myorg/page_view/1.0.0" ->
-          Left(SchemaNotFound(SchemaName.parse("com.myorg/page_view/1.0.0").toOption.get)))
+          Left(SchemaNotFound(SchemaRef.parse("com.myorg/page_view/1.0.0").toOption.get)))
       )
       postEnvelope(validEnvelope, registry = stub, sink = sink)
       sink.written.unsafeRunSync() must beEmpty

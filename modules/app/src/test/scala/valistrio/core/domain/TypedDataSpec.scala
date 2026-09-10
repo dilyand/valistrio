@@ -3,17 +3,17 @@ package valistrio.core.domain
 import io.circe.parser
 import org.specs2.mutable.Specification
 
-class TypedPayloadSpec extends Specification {
+class TypedDataSpec extends Specification {
 
   private def decode(json: String) =
-    parser.decode[TypedPayload](json)
+    parser.decode[TypedData](json)
 
-  "TypedPayload decoder" should {
+  "TypedData decoder" should {
     "decode a valid payload" in {
       val result = decode("""{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}}""")
       result must beRight(
-        TypedPayload(
-          SchemaName("com.myorg", "page_view", SchemaVersion(1, 0, 0)),
+        TypedData(
+          SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0)),
           parser.parse("""{"page_url":"https://example.com"}""").toOption.get
         )
       )

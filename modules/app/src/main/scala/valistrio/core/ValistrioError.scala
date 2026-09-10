@@ -1,7 +1,7 @@
 package valistrio.core
 
 import cats.data.NonEmptyList
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 
 sealed abstract class ValistrioError extends Throwable {
   val msg: String
@@ -37,7 +37,7 @@ object ValistrioError {
 
     // Recoverable, ops-side (HTTP 404 / 503 / 504): fixable by acting on the system.
 
-    final case class SchemaNotFound(schemaName: SchemaName) extends ValidateError {
+    final case class SchemaNotFound(schemaName: SchemaRef) extends ValidateError {
       val msg = s"Schema not found: $schemaName"
     }
 

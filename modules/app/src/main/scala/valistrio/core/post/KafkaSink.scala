@@ -8,7 +8,7 @@ import org.apache.kafka.common.errors.{TimeoutException => KafkaTimeoutException
 import valistrio.core.Config.KafkaConfig
 import valistrio.core.ValistrioError.SinkError
 import valistrio.core.ValistrioError.SinkError._
-import valistrio.core.domain.TransportEnvelope
+import valistrio.core.domain.Event
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -55,7 +55,7 @@ object KafkaSink {
 
   private class LiveKafkaSink(producer: KafkaProducer[IO, String, String], topic: String) extends Sink[IO] {
 
-    def write(envelope: TransportEnvelope): IO[Either[SinkError, Unit]] = {
+    def write(envelope: Event): IO[Either[SinkError, Unit]] = {
       val record = ProducerRecord(topic, envelope.data.meta.eventId, envelope.asJson.noSpaces)
       producer
         .produceOne_(record)

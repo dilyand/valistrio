@@ -64,15 +64,15 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
     }
   }
 
-  private val envelope = TransportEnvelope(
-    SchemaName("com.valistrio", "envelope", SchemaVersion(1, 0, 0)),
-    EnvelopeData(
+  private val envelope = Event(
+    SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0)),
+    EventData(
       EventMeta("018f1e2a-dead-beef-cafe-000000000002", "2026-06-13T10:00:00Z"),
-      TypedPayload(
-        SchemaName("com.myorg", "page_view", SchemaVersion(1, 0, 0)),
+      TypedData(
+        SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0)),
         io.circe.Json.obj("page_url" -> io.circe.Json.fromString("https://example.com"))
       ),
-      None: Option[NonEmptyList[TypedPayload]]
+      None: Option[NonEmptyList[TypedData]]
     )
   )
 
@@ -85,7 +85,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
         } yield result -> consumed
       }.map { case (result, consumed) =>
         (result must beRight(())) and
-          (parser.decode[TransportEnvelope](consumed) must beRight(envelope))
+          (parser.decode[Event](consumed) must beRight(envelope))
       }
     }
   }

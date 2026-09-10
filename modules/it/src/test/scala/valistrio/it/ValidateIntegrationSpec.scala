@@ -12,7 +12,7 @@ import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.SchemaRegistryConfig
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 import valistrio.core.validate.ConfluentSchemaRegistry
 import valistrio.it.containers.{KafkaContainer, SchemaRegistryContainer, ValistrioContainer}
 
@@ -54,7 +54,7 @@ class ValidateIntegrationSpec
   // ---- Test schema ----
 
   private val pageViewSchemaName =
-    SchemaName.parse("com.myorg/page_view/1.0.0")
+    SchemaRef.parse("com.myorg/page_view/1.0.0")
       .getOrElse(throw new IllegalStateException("invalid schema name"))
 
   private val pageViewSchemaJson =

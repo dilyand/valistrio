@@ -1,7 +1,7 @@
 package valistrio.core.post
 
 import valistrio.core.ValistrioError.SinkError
-import valistrio.core.domain.TransportEnvelope
+import valistrio.core.domain.Event
 
 /** Algebra for writing a validated envelope to a downstream sink (Kafka, HTTP, in-memory for tests).
   *
@@ -18,5 +18,5 @@ trait Sink[F[_]] {
     *    could not be completed; the caller is responsible for routing the envelope
     *    to the DLQ (see CLAUDE.md for the DLQ envelope format)
     */
-  def write(envelope: TransportEnvelope): F[Either[SinkError, Unit]]
+  def write(envelope: Event): F[Either[SinkError, Unit]]
 }

@@ -5,10 +5,10 @@ import io.circe.parser
 import io.circe.syntax._
 import org.specs2.mutable.Specification
 
-class TransportEnvelopeSpec extends Specification {
+class EventSpec extends Specification {
 
   private def decode(json: String) =
-    parser.decode[TransportEnvelope](json)
+    parser.decode[Event](json)
 
   private val validMeta =
     """{"event_id":"018f1e2a-dead-beef-cafe-000000000000","produced_at":"2026-06-08T12:00:00Z"}"""
@@ -27,7 +27,7 @@ class TransportEnvelopeSpec extends Specification {
     s"""{"meta":$meta,"event":$event$ctxPart}"""
   }
 
-  "TransportEnvelope decoder" should {
+  "Event decoder" should {
     "decode a valid envelope without contexts" in {
       decode(envelope(envelopeData())) must beRight
     }
@@ -36,7 +36,7 @@ class TransportEnvelopeSpec extends Specification {
       val result = decode(envelope(envelopeData(contexts = Some(s"[$validContext]"))))
       result must beRight.like { case te =>
         te.data.contexts must beSome(NonEmptyList.one(
-          TypedPayload(SchemaName("com.myorg", "user", SchemaVersion(1, 0, 0)),
+          TypedData(SchemaRef("com.myorg", "user", SchemaVersion(1, 0, 0)),
             parser.parse("""{"user_id":"u-123"}""").toOption.get)
         ))
       }
@@ -74,7 +74,7 @@ class TransportEnvelopeSpec extends Specification {
       decode(envelope(s"""{"meta":$validMeta,"event":$validEvent,"unknown":"field"}""")) must beLeft
     }
 
-    "reject an unknown key inside the event TypedPayload" in {
+    "reject an unknown key inside the event TypedData" in {
       val badEvent = """{"schema":"com.myorg/page_view/1.0.0","data":{},"extra":"bad"}"""
       decode(envelope(envelopeData(event = badEvent))) must beLeft
     }
@@ -88,16 +88,16 @@ class TransportEnvelopeSpec extends Specification {
     }
   }
 
-  "TransportEnvelope encoder" should {
+  "Event encoder" should {
     "round-trip a decoded envelope without contexts" in {
       decode(envelope(envelopeData())) must beRight.like { case te =>
-        parser.decode[TransportEnvelope](te.asJson.noSpaces) must beRight(te)
+        parser.decode[Event](te.asJson.noSpaces) must beRight(te)
       }
     }
 
     "round-trip a decoded envelope with contexts" in {
       decode(envelope(envelopeData(contexts = Some(s"[$validContext]")))) must beRight.like { case te =>
-        parser.decode[TransportEnvelope](te.asJson.noSpaces) must beRight(te)
+        parser.decode[Event](te.asJson.noSpaces) must beRight(te)
       }
     }
   }

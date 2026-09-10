@@ -4,7 +4,7 @@ import cats.data.NonEmptyList
 import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.{ValidateError, ValidationError}
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{SchemaName, SchemaVersion}
+import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
 class ValidateErrorSpec extends Specification {
   "ValidateError" should {
@@ -17,7 +17,7 @@ class ValidateErrorSpec extends Specification {
     }
 
     "SchemaNotFound msg includes the schema name" in {
-      val name = SchemaName("com.myorg", "page_view", SchemaVersion(1, 0, 0))
+      val name = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))
       SchemaNotFound(name).msg must contain("com.myorg/page_view/1.0.0")
     }
 

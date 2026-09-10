@@ -2,7 +2,7 @@ package valistrio.core.validate
 
 import io.circe.Json
 import valistrio.core.ValistrioError.ValidateError
-import valistrio.core.domain.SchemaName
+import valistrio.core.domain.SchemaRef
 
 /** Algebra for interacting with the Schema Registry.
   *
@@ -25,12 +25,12 @@ trait SchemaRegistry[F[_]] {
     *  - [[scala.Left]] with [[valistrio.core.ValistrioError.ValidateError.ValidationFailed]]
     *    if `data` does not conform to the schema (all errors collected, not short-circuited)
     */
-  def validate(name: SchemaName, data: Json): F[Either[ValidateError, Unit]]
+  def validate(name: SchemaRef, data: Json): F[Either[ValidateError, Unit]]
 
   /** Register `schemaJson` in the registry under `name` as the Confluent subject.
     *
     * Idempotent: re-registering the same schema content is safe. Used at startup
     * to seed Valistrio-owned schemas. Raises a fatal IO error on failure.
     */
-  def register(name: SchemaName, schemaJson: String): F[Unit]
+  def register(name: SchemaRef, schemaJson: String): F[Unit]
 }
