@@ -6,13 +6,12 @@ import com.comcast.ip4s.{Host, Port}
 import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
-import org.typelevel.log4cats.slf4j.Slf4jLogger
+import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
 import valistrio.core.post.{PostService, Sink}
 import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
-class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry[IO], sink: Sink[IO]) {
-  implicit val logger: org.typelevel.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
+class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry, sink: Sink, logger: Log4CatsLogger[IO]) {
 
   def run: IO[Unit] =
     for {

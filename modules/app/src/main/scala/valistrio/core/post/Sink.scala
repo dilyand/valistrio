@@ -1,22 +1,14 @@
 package valistrio.core.post
 
+import cats.effect.IO
 import valistrio.core.ValistrioError.SinkError
 import valistrio.core.domain.Event
 
-/** Algebra for writing a validated envelope to a downstream sink (Kafka, HTTP, in-memory for tests).
-  *
-  * The algebra hides all transport details, allowing the /post service to remain
-  * independent of the particular sink implementation.
-  */
-trait Sink[F[_]] {
+/** Algebra for writing a validated event to a downstream transport. */
+trait Sink {
 
-  /** Write `envelope` to the sink.
-    *
-    * Returns:
-    *  - [[scala.Right]] on success
-    *  - [[scala.Left]] with [[valistrio.core.ValistrioError.SinkError]] if the write
-    *    could not be completed; the caller is responsible for routing the envelope
-    *    to the DLQ (see CLAUDE.md for the DLQ envelope format)
+  /** Write `event`. A [[SinkError]] on the Left means the write could not be completed;
+    * the caller routes the event to the DLQ (see CLAUDE.md for the DLQ format).
     */
-  def write(envelope: Event): F[Either[SinkError, Unit]]
+  def write(event: Event): IO[Either[SinkError, Unit]]
 }

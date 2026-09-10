@@ -9,14 +9,13 @@ import valistrio.core.post.KafkaSink
 import valistrio.core.validate.ConfluentSchemaRegistry
 
 object Main extends IOApp {
-  override def run(args: List[String]): IO[ExitCode] = {
-    implicit val logger = Slf4jLogger.getLogger[IO]
-
-    Config.make.flatMap { conf =>
-      (ConfluentSchemaRegistry.resource(conf.schemaRegistry), KafkaSink.resource(conf.kafka)).tupled.use {
-        case (schemaRegistry, sink) =>
-          new Server(conf.server, schemaRegistry, sink).run.as(ExitCode.Success)
+  override def run(args: List[String]): IO[ExitCode] =
+    Slf4jLogger.create[IO].flatMap { implicit logger =>
+      Config.make.flatMap { conf =>
+        (ConfluentSchemaRegistry.resource(conf.schemaRegistry), KafkaSink.resource(conf.kafka))
+          .mapN((registry, sink) => new Server(conf.server, registry, sink, logger))
+          .use(_.run)
+          .as(ExitCode.Success)
       }
     }
-  }
 }

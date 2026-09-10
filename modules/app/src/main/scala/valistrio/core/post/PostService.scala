@@ -12,7 +12,7 @@ import valistrio.core.validate.{SchemaRegistry, ValidateResponse, ValidateRespon
   * Deduplicating repeated `event_id`s is the sink's responsibility for 0.1.0 —
   * PostService itself does not check for or reject duplicates.
   */
-class PostService(registry: SchemaRegistry[IO], sink: Sink[IO]) {
+class PostService(registry: SchemaRegistry, sink: Sink) {
 
   private val validateService = new ValidateService(registry)
 

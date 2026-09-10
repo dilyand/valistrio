@@ -23,7 +23,7 @@ class RoutesSpec extends Specification {
   private class StubSchemaRegistry(
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
-  ) extends SchemaRegistry[IO] {
+  ) extends SchemaRegistry {
     def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
       IO.pure(responses.getOrElse(name.toString, default))
     def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
@@ -31,10 +31,10 @@ class RoutesSpec extends Specification {
 
   // ---- Helpers ----
 
-  private def app(registry: SchemaRegistry[IO] = new StubSchemaRegistry()): HttpApp[IO] =
+  private def app(registry: SchemaRegistry = new StubSchemaRegistry()): HttpApp[IO] =
     Routes.validate(new ValidateService(registry)).orNotFound
 
-  private def post(body: String, registry: SchemaRegistry[IO] = new StubSchemaRegistry()): Response[IO] = {
+  private def post(body: String, registry: SchemaRegistry = new StubSchemaRegistry()): Response[IO] = {
     val req = Request[IO](method = Method.POST, uri = uri"/validate")
       .withEntity(body)
     app(registry).run(req).unsafeRunSync()
@@ -43,13 +43,13 @@ class RoutesSpec extends Specification {
   private def bodyJson(resp: Response[IO]): Json =
     parser.parse(resp.as[String].unsafeRunSync()).toOption.get
 
-  private def postApp(registry: SchemaRegistry[IO], sink: Sink[IO]): HttpApp[IO] =
+  private def postApp(registry: SchemaRegistry, sink: Sink): HttpApp[IO] =
     Routes.post(new PostService(registry, sink)).orNotFound
 
   private def postEnvelope(
     body: String,
-    registry: SchemaRegistry[IO] = new StubSchemaRegistry(),
-    sink: Sink[IO] = StubSink.succeeding.unsafeRunSync()
+    registry: SchemaRegistry = new StubSchemaRegistry(),
+    sink: Sink = StubSink.succeeding.unsafeRunSync()
   ): Response[IO] = {
     val req = Request[IO](method = Method.POST, uri = uri"/post").withEntity(body)
     postApp(registry, sink).run(req).unsafeRunSync()

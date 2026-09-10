@@ -19,7 +19,7 @@ import valistrio.core.domain.{SchemaRef, SchemaVersion, Event, TypedData}
   *     b. `event.data` against `event.schema`
   *     c. Each `context.data` against its `context.schema`
   */
-class ValidateService(registry: SchemaRegistry[IO]) {
+class ValidateService(registry: SchemaRegistry) {
 
   def validate(rawBody: String): IO[ValidateResponse] =
     ValidateService.parseAndDecode(rawBody) match {

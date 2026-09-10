@@ -21,7 +21,7 @@ class ValidateServiceSpec extends Specification {
   private class StubSchemaRegistry(
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
-  ) extends SchemaRegistry[IO] {
+  ) extends SchemaRegistry {
     def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
       IO.pure(responses.getOrElse(name.toString, default))
     def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit

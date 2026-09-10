@@ -20,7 +20,7 @@ class PostServiceSpec extends Specification {
   private class StubSchemaRegistry(
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
-  ) extends SchemaRegistry[IO] {
+  ) extends SchemaRegistry {
     def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
       IO.pure(responses.getOrElse(name.toString, default))
     def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
@@ -44,7 +44,7 @@ class PostServiceSpec extends Specification {
 
   // ---- Helpers ----
 
-  private def run(registry: SchemaRegistry[IO], sink: Sink[IO], body: String): PostResponse =
+  private def run(registry: SchemaRegistry, sink: Sink, body: String): PostResponse =
     new PostService(registry, sink).post(body).unsafeRunSync()
 
   private def errorTypes(resp: PostResponse): List[String] = resp match {

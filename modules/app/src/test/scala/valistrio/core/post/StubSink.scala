@@ -8,7 +8,7 @@ import valistrio.core.domain.Event
   * (e.g. the /post service) without a real Kafka broker.
   */
 final class StubSink private (ref: Ref[IO, Vector[Event]], result: Either[SinkError, Unit])
-    extends Sink[IO] {
+    extends Sink {
 
   def write(envelope: Event): IO[Either[SinkError, Unit]] =
     ref.update(_ :+ envelope).as(result)
