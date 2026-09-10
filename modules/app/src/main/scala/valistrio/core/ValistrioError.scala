@@ -25,14 +25,10 @@ object ValistrioError {
 
   sealed trait ValidateError extends ValistrioError
   final object ValidateError {
-    // Non-recoverable (HTTP 400): no usable artifact can be extracted from the request.
+    // Non-recoverable (HTTP 400): the body is not JSON at all.
 
     final case class MalformedJson(message: String) extends ValidateError {
       val msg = s"Request body is not valid JSON. $message"
-    }
-
-    final case class StructuralDecodeError(message: String) extends ValidateError {
-      val msg = s"Request body does not match the expected envelope structure. $message"
     }
 
     // Recoverable, ops-side (HTTP 404 / 503 / 504): fixable by acting on the system.

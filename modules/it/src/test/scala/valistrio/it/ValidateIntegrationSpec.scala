@@ -4,9 +4,7 @@ import cats.effect.IO
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.unsafe.implicits.global
 import io.circe.Json
-import io.circe.syntax._
 import org.http4s._
-import org.http4s.implicits._
 import org.specs2.mutable.Specification
 import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
@@ -20,19 +18,12 @@ import scala.io.Source
 
 /** Integration tests for POST /validate against the real shipped Docker image.
   *
-  * Container topology:
-  *   KafkaContainer (KRaft) → SchemaRegistryContainer → ValistrioContainer
+  * Container topology: KafkaContainer (KRaft) → SchemaRegistryContainer → ValistrioContainer.
+  * beforeAll registers the test user schema (`com.myorg/page_view/1.0.0`); the Valistrio
+  * container seeds its own `io.github.dilyand.valistrio/event/1.0.0` on startup.
   *
-  * Schema setup (beforeAll):
-  *  1. Kafka + Schema Registry start.
-  *  2. A temporary ConfluentSchemaRegistry client registers the test user schema
-  *     (`com.myorg/page_view/1.0.0`) directly via our own algebra — no curl.
-  *  3. The Valistrio container starts; its ConfluentSchemaRegistry seeds the
-  *     Valistrio-owned schemas (com.valistrio/envelope/1.0.0) on startup.
-  *
-  * Tests make real HTTP calls to the mapped Valistrio port via [[Http]].
-  * Test methods return `IO[MatchResult]` — the `CatsEffect` mixin runs them
-  * inside the framework so specs2 can evaluate them correctly.
+  * Structural validation is the event schema's job now, so unknown-field / missing-field /
+  * empty-contexts cases show up here as `schema_validation_failed` (422).
   */
 class ValidateIntegrationSpec
     extends Specification
@@ -54,8 +45,7 @@ class ValidateIntegrationSpec
   // ---- Test schema ----
 
   private val pageViewSchemaName =
-    SchemaRef.parse("com.myorg/page_view/1.0.0")
-      .getOrElse(throw new IllegalStateException("invalid schema name"))
+    SchemaRef.parse("com.myorg/page_view/1.0.0").getOrElse(throw new IllegalStateException("invalid schema name"))
 
   private val pageViewSchemaJson =
     Source.fromResource("schemas/page_view-1.0.0.json").mkString
@@ -66,8 +56,6 @@ class ValidateIntegrationSpec
     kafka.start()
     schemaRegistry.start()
 
-    // Register the test user schema before Valistrio starts.
-    // We borrow a ConfluentSchemaRegistry client for just this purpose.
     implicit val logger = Slf4jLogger.getLogger[IO]
     val config = SchemaRegistryConfig(schemaRegistry.url, timeoutMs = 15000)
     ConfluentSchemaRegistry.resource(config).use { reg =>
@@ -89,9 +77,7 @@ class ValidateIntegrationSpec
   private def validateUri = Uri.unsafeFromString(s"${valistrio.url}/validate")
 
   private def post(body: String): IO[(Status, Json)] =
-    TestHttp.statusAndBody(
-      Request[IO](method = Method.POST, uri = validateUri).withEntity(body)
-    )
+    TestHttp.statusAndBody(Request[IO](method = Method.POST, uri = validateUri).withEntity(body))
 
   private def errorTypes(body: Json): List[String] =
     (body \\ "type").flatMap(_.asString)
@@ -101,9 +87,9 @@ class ValidateIntegrationSpec
   private val validMeta =
     """{"event_id":"018f1e2a-dead-beef-cafe-000000000001","produced_at":"2026-06-13T10:00:00Z"}"""
 
-  private def envelope(eventSchema: String, eventData: String, contexts: Option[String] = None): String = {
+  private def envelope(bodySchema: String, bodyData: String, contexts: Option[String] = None): String = {
     val ctxPart = contexts.map(c => s""","contexts":[$c]""").getOrElse("")
-    s"""{"schema":"com.valistrio/envelope/1.0.0","data":{"meta":$validMeta,"event":{"schema":"$eventSchema","data":$eventData}$ctxPart}}"""
+    s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":{"schema":"$bodySchema","data":$bodyData}$ctxPart}}"""
   }
 
   private val validEnvelope =
@@ -112,18 +98,15 @@ class ValidateIntegrationSpec
   private val invalidPayloadEnvelope =
     envelope("com.myorg/page_view/1.0.0", """{"not_page_url":"oops"}""")
 
-  private val unknownSchemaEnvelope =
-    envelope("com.myorg/not_registered/1.0.0", """{"x":"y"}""")
-
   private val unknownSchemaName = "com.myorg/not_registered/1.0.0"
+  private val unknownSchemaEnvelope =
+    envelope(unknownSchemaName, """{"x":"y"}""")
 
   private val multiContextEnvelope =
     envelope(
       "com.myorg/page_view/1.0.0",
       """{"page_url":"https://example.com"}""",
-      contexts = Some(
-        s"""{"schema":"$unknownSchemaName","data":{"a":"1"}},{"schema":"$unknownSchemaName","data":{"b":"2"}}"""
-      )
+      contexts = Some(s"""{"schema":"$unknownSchemaName","data":{"a":"1"}},{"schema":"$unknownSchemaName","data":{"b":"2"}}""")
     )
 
   // ---- Tests ----
@@ -132,36 +115,46 @@ class ValidateIntegrationSpec
 
     "return 200 and valid=true for a valid envelope" in {
       post(validEnvelope).map { case (status, body) =>
-        status must beEqualTo(Status.Ok) and
-          ((body \\ "valid").headOption must beSome(Json.True))
+        status must beEqualTo(Status.Ok) and ((body \\ "valid").headOption must beSome(Json.True))
       }
     }
 
     "return 400 for malformed JSON" in {
-      post("not json {{{").map { case (status, _) =>
-        status must beEqualTo(Status.BadRequest)
-      }
+      post("not json {{{").map { case (status, _) => status must beEqualTo(Status.BadRequest) }
     }
 
-    "return 400 for structurally invalid envelope" in {
-      val bad = """{"schema":"com.valistrio/envelope/1.0.0","data":{},"unexpected":"field"}"""
+    // -- Structural violations are now schema validation failures (422) --
+
+    "return 422 for an unknown field at the envelope level" in {
+      val bad = s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}}},"unexpected":"field"}"""
       post(bad).map { case (status, body) =>
-        status must beEqualTo(Status.BadRequest) and
-          (errorTypes(body) must contain("structural_decode_error"))
+        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
       }
     }
 
-    "return 404 when the event schema is not registered" in {
+    "return 422 when the event body is missing" in {
+      val bad = s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta}}"""
+      post(bad).map { case (status, body) =>
+        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
+      }
+    }
+
+    "return 422 for an empty contexts array" in {
+      val bad = s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}},"contexts":[]}}"""
+      post(bad).map { case (status, body) =>
+        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
+      }
+    }
+
+    "return 404 when the body schema is not registered" in {
       post(unknownSchemaEnvelope).map { case (status, body) =>
-        status must beEqualTo(Status.NotFound) and
-          (errorTypes(body) must contain("schema_not_found"))
+        status must beEqualTo(Status.NotFound) and (errorTypes(body) must contain("schema_not_found"))
       }
     }
 
-    "return 422 when event payload violates the registered schema" in {
+    "return 422 when the payload violates its registered schema" in {
       post(invalidPayloadEnvelope).map { case (status, body) =>
-        status must beEqualTo(Status.UnprocessableEntity) and
-          (errorTypes(body) must contain("schema_validation_failed"))
+        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
       }
     }
 
@@ -173,10 +166,10 @@ class ValidateIntegrationSpec
       }
     }
 
-    "mark validation errors as recoverable=true and non-recoverable errors as false" in {
+    "mark validation errors recoverable=true and malformed JSON as false" in {
       post(invalidPayloadEnvelope).flatMap { case (_, validBody) =>
         post("not json").map { case (_, invalidBody) =>
-          val validFlags   = (validBody   \\ "recoverable").flatMap(_.asBoolean)
+          val validFlags   = (validBody \\ "recoverable").flatMap(_.asBoolean)
           val invalidFlags = (invalidBody \\ "recoverable").flatMap(_.asBoolean)
           (validFlags must contain(true)) and (invalidFlags must contain(false))
         }
@@ -185,17 +178,12 @@ class ValidateIntegrationSpec
 
     "collect errors from multiple failing contexts without short-circuiting" in {
       post(multiContextEnvelope).map { case (_, body) =>
-        // Both contexts reference an unregistered schema → at least 2 schema_not_found entries
         errorTypes(body).count(_ == "schema_not_found") must beGreaterThanOrEqualTo(2)
       }
     }
 
-    "prove the Valistrio-owned envelope schema was seeded at startup" in {
-      // If envelope seeding failed, every request would return 404.
-      // A 200 from a valid request proves seeding worked.
-      post(validEnvelope).map { case (status, _) =>
-        status must beEqualTo(Status.Ok)
-      }
+    "prove the Valistrio-owned event schema was seeded at startup" in {
+      post(validEnvelope).map { case (status, _) => status must beEqualTo(Status.Ok) }
     }
   }
 }

@@ -2,7 +2,6 @@ package valistrio.core.post
 
 import cats.effect.{IO, Resource}
 import fs2.kafka._
-import io.circe.syntax._
 import org.apache.kafka.clients.admin.{AdminClient, AdminClientConfig}
 import org.apache.kafka.common.errors.{
   RecordTooLargeException,
@@ -13,7 +12,7 @@ import org.apache.kafka.common.errors.{
 import valistrio.core.Config.KafkaConfig
 import valistrio.core.ValistrioError.SinkError
 import valistrio.core.ValistrioError.SinkError._
-import valistrio.core.domain.Event
+import valistrio.core.domain.ValidatedEvent
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -34,8 +33,8 @@ object KafkaSink {
     Resource.eval(checkConnectivity(config)).flatMap { _ =>
       producerResource(config).map { producer =>
         new Sink {
-          def write(event: Event): IO[Either[SinkError, Unit]] = {
-            val record = ProducerRecord(config.topic, event.data.meta.eventId, event.asJson.noSpaces)
+          def write(event: ValidatedEvent): IO[Either[SinkError, Unit]] = {
+            val record = ProducerRecord(config.topic, event.eventId, event.json.noSpaces)
             producer.produceOne_(record).flatten.attempt.map {
               case Right(_)                                  => Right(())
               case Left(_: KafkaTimeoutException)            => Left(Timeout)

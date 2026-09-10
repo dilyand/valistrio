@@ -23,8 +23,8 @@ class ConfluentSchemaRegistrySpec extends Specification {
     }
 
     "produce a stable subject for Valistrio-owned schemas" in {
-      val name = SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0))
-      name.toString must beEqualTo("com.valistrio/envelope/1.0.0")
+      val name = SchemaRef("io.github.dilyand.valistrio", "event", SchemaVersion(1, 0, 0))
+      name.toString must beEqualTo("io.github.dilyand.valistrio/event/1.0.0")
     }
   }
 

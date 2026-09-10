@@ -22,7 +22,7 @@ class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry, sink: Sink, log
 
   private def mkApp: HttpApp[IO] = {
     val validateService = new ValidateService(schemaRegistry)
-    val postService     = new PostService(schemaRegistry, sink)
+    val postService     = new PostService(validateService, sink)
     val routes          = Routes.health <+> Routes.validate(validateService) <+> Routes.post(postService)
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)

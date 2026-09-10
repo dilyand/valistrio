@@ -12,9 +12,6 @@ class ValidateErrorSpec extends Specification {
       MalformedJson("unexpected token at position 5").msg must contain("unexpected token at position 5")
     }
 
-    "StructuralDecodeError msg includes the cause" in {
-      StructuralDecodeError("Unknown field: foo").msg must contain("Unknown field: foo")
-    }
 
     "SchemaNotFound msg includes the schema name" in {
       val name = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))

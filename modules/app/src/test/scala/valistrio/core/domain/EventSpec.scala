@@ -1,104 +1,57 @@
 package valistrio.core.domain
 
-import cats.data.NonEmptyList
 import io.circe.parser
-import io.circe.syntax._
 import org.specs2.mutable.Specification
 
+/** Extraction of the navigable [[Event]] from JSON. Structural rejection (unknown fields,
+  * missing fields, empty contexts, bad refs) is the event schema's job now, so it is covered
+  * by the integration suite; here we only check that a well-formed event navigates correctly.
+  */
 class EventSpec extends Specification {
-
-  private def decode(json: String) =
-    parser.decode[Event](json)
 
   private val validMeta =
     """{"event_id":"018f1e2a-dead-beef-cafe-000000000000","produced_at":"2026-06-08T12:00:00Z"}"""
-
-  private val validEvent =
+  private val validBody =
     """{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}}"""
-
   private val validContext =
     """{"schema":"com.myorg/user/1.0.0","data":{"user_id":"u-123"}}"""
 
-  private def envelope(data: String) =
-    s"""{"schema":"com.valistrio/envelope/1.0.0","data":$data}"""
-
-  private def envelopeData(meta: String = validMeta, event: String = validEvent, contexts: Option[String] = None) = {
-    val ctxPart = contexts.map(c => s""","contexts":$c""").getOrElse("")
-    s"""{"meta":$meta,"event":$event$ctxPart}"""
+  private def eventJson(data: String) =
+    s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":$data}"""
+  private def eventData(contexts: Option[String] = None) = {
+    val ctx = contexts.map(c => s""","contexts":$c""").getOrElse("")
+    s"""{"meta":$validMeta,"body":$validBody$ctx}"""
   }
 
-  "Event decoder" should {
-    "decode a valid envelope without contexts" in {
-      decode(envelope(envelopeData())) must beRight
-    }
+  private def extract(json: String) =
+    Event.fromJson(parser.parse(json).toOption.get)
 
-    "decode a valid envelope with one context" in {
-      val result = decode(envelope(envelopeData(contexts = Some(s"[$validContext]"))))
-      result must beRight.like { case te =>
-        te.data.contexts must beSome(NonEmptyList.one(
-          TypedData(SchemaRef("com.myorg", "user", SchemaVersion(1, 0, 0)),
-            parser.parse("""{"user_id":"u-123"}""").toOption.get)
-        ))
+  "Event.fromJson" should {
+    "extract a valid event without contexts" in {
+      extract(eventJson(eventData())) must beRight.like { case e =>
+        e.schema must beEqualTo(SchemaRef("io.github.dilyand.valistrio", "event", SchemaVersion(1, 0, 0)))
+        e.data.body.schema must beEqualTo(SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0)))
+        e.data.contexts must beNone
       }
     }
 
-    "decode a valid envelope with multiple contexts" in {
-      decode(envelope(envelopeData(contexts = Some(s"[$validContext,$validContext]")))) must beRight.like {
-        case te => te.data.contexts must beSome.like { case nel => nel.size must beEqualTo(2) }
+    "extract a single context" in {
+      extract(eventJson(eventData(contexts = Some(s"[$validContext]")))) must beRight.like { case e =>
+        e.data.contexts must beSome.like { case nel =>
+          nel.head.schema must beEqualTo(SchemaRef("com.myorg", "user", SchemaVersion(1, 0, 0)))
+        }
       }
     }
 
-    "decode when contexts field is absent" in {
-      decode(envelope(envelopeData())) must beRight.like {
-        case te => te.data.contexts must beNone
+    "extract multiple contexts" in {
+      extract(eventJson(eventData(contexts = Some(s"[$validContext,$validContext]")))) must beRight.like { case e =>
+        e.data.contexts must beSome.like { case nel => nel.size must beEqualTo(2) }
       }
     }
 
-    "reject an empty contexts array" in {
-      decode(envelope(envelopeData(contexts = Some("[]")))) must beLeft
-    }
-
-    "reject a missing meta" in {
-      decode(envelope(s"""{"event":$validEvent}""")) must beLeft
-    }
-
-    "reject a missing event" in {
-      decode(envelope(s"""{"meta":$validMeta}""")) must beLeft
-    }
-
-    "reject an unknown key at the envelope level" in {
-      decode(s"""{"schema":"com.valistrio/envelope/1.0.0","data":${envelopeData()},"extra":"bad"}""") must beLeft
-    }
-
-    "reject an unknown key in envelope data" in {
-      decode(envelope(s"""{"meta":$validMeta,"event":$validEvent,"unknown":"field"}""")) must beLeft
-    }
-
-    "reject an unknown key inside the event TypedData" in {
-      val badEvent = """{"schema":"com.myorg/page_view/1.0.0","data":{},"extra":"bad"}"""
-      decode(envelope(envelopeData(event = badEvent))) must beLeft
-    }
-
-    "reject a non-object at the envelope level" in {
-      decode("""["not","an","object"]""") must beLeft
-    }
-
-    "reject a bad envelope schema name" in {
-      decode(s"""{"schema":"bad-schema","data":${envelopeData()}}""") must beLeft
-    }
-  }
-
-  "Event encoder" should {
-    "round-trip a decoded envelope without contexts" in {
-      decode(envelope(envelopeData())) must beRight.like { case te =>
-        parser.decode[Event](te.asJson.noSpaces) must beRight(te)
-      }
-    }
-
-    "round-trip a decoded envelope with contexts" in {
-      decode(envelope(envelopeData(contexts = Some(s"[$validContext]")))) must beRight.like { case te =>
-        parser.decode[Event](te.asJson.noSpaces) must beRight(te)
-      }
+    "carry the original JSON verbatim" in {
+      val json = parser.parse(eventJson(eventData())).toOption.get
+      Event.fromJson(json) must beRight.like { case e => e.json must beEqualTo(json) }
     }
   }
 }

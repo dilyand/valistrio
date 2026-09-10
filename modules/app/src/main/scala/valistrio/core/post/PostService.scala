@@ -2,35 +2,31 @@ package valistrio.core.post
 
 import cats.data.NonEmptyList
 import cats.effect.IO
-import valistrio.core.validate.{SchemaRegistry, ValidateResponse, ValidateResponseError, ValidateService}
+import valistrio.core.ValistrioError.ValidateError
+import valistrio.core.validate.{ValidateResponseError, ValidateService}
 
-/** Orchestrates the full /post request flow: parse, decode, validate (reusing
-  * [[ValidateService]]), then write the validated envelope to the [[Sink]].
+/** Orchestrates the /post flow: parse, validate (reusing the shared [[ValidateService]]),
+  * then write the [[valistrio.core.domain.ValidatedEvent]] to the [[Sink]].
   *
-  * `meta.event_id` is the idempotency key for the written record (see
-  * [[valistrio.core.post.KafkaSink]], which uses it as the Kafka record key).
-  * Deduplicating repeated `event_id`s is the sink's responsibility for 0.1.0 —
-  * PostService itself does not check for or reject duplicates.
+  * `event_id` is the idempotency key for the written record; deduplicating repeated ids is
+  * the sink's responsibility for 0.1.0 — PostService does not check for duplicates.
   */
-class PostService(registry: SchemaRegistry, sink: Sink) {
-
-  private val validateService = new ValidateService(registry)
+class PostService(validateService: ValidateService, sink: Sink) {
 
   def post(rawBody: String): IO[PostResponse] =
-    ValidateService.parseAndDecode(rawBody) match {
-      case Left(err) =>
-        IO.pure(PostResponse.Failure(ValidateResponseError.from(err).map(PostResponseError.fromValidate)))
-
-      case Right((json, envelope)) =>
-        validateService.validateAll(json, envelope).flatMap {
-          case ValidateResponse.Failure(errors) =>
-            IO.pure(PostResponse.Failure(errors.map(PostResponseError.fromValidate)))
-
-          case ValidateResponse.Success =>
-            sink.write(envelope).map {
+    ValidateService.parse(rawBody) match {
+      case Left(err) => IO.pure(PostResponse.Failure(toPostErrors(NonEmptyList.one(err))))
+      case Right(json) =>
+        validateService.validateEvent(json).flatMap {
+          case Left(errors) => IO.pure(PostResponse.Failure(toPostErrors(errors)))
+          case Right(validated) =>
+            sink.write(validated).map {
               case Right(())   => PostResponse.Written
               case Left(error) => PostResponse.Failure(NonEmptyList.one(PostResponseError.fromSink(error)))
             }
         }
     }
+
+  private def toPostErrors(errors: NonEmptyList[ValidateError]): NonEmptyList[PostResponseError] =
+    errors.flatMap(e => ValidateResponseError.from(e).map(PostResponseError.fromValidate))
 }

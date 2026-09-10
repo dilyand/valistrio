@@ -29,14 +29,16 @@ class RoutesSpec extends Specification {
     def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
   }
 
+  private def notFound(subject: String): Either[ValidateError, Unit] =
+    Left(SchemaNotFound(SchemaRef.parse(subject).toOption.get))
+
   // ---- Helpers ----
 
   private def app(registry: SchemaRegistry = new StubSchemaRegistry()): HttpApp[IO] =
     Routes.validate(new ValidateService(registry)).orNotFound
 
   private def post(body: String, registry: SchemaRegistry = new StubSchemaRegistry()): Response[IO] = {
-    val req = Request[IO](method = Method.POST, uri = uri"/validate")
-      .withEntity(body)
+    val req = Request[IO](method = Method.POST, uri = uri"/validate").withEntity(body)
     app(registry).run(req).unsafeRunSync()
   }
 
@@ -44,7 +46,7 @@ class RoutesSpec extends Specification {
     parser.parse(resp.as[String].unsafeRunSync()).toOption.get
 
   private def postApp(registry: SchemaRegistry, sink: Sink): HttpApp[IO] =
-    Routes.post(new PostService(registry, sink)).orNotFound
+    Routes.post(new PostService(new ValidateService(registry), sink)).orNotFound
 
   private def postEnvelope(
     body: String,
@@ -59,17 +61,22 @@ class RoutesSpec extends Specification {
 
   private val validMeta =
     """{"event_id":"018f1e2a-dead-beef-cafe-000000000000","produced_at":"2026-06-08T12:00:00Z"}"""
-  private val validEvent =
+  private val validBody =
     """{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}}"""
+  private val validContext =
+    """{"schema":"com.myorg/user/1.0.0","data":{"user_id":"u-123"}}"""
 
   private val validEnvelope =
-    s"""{"schema":"com.valistrio/envelope/1.0.0","data":{"meta":$validMeta,"event":$validEvent}}"""
+    s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":$validBody}}"""
+  private val validEnvelopeWithContext =
+    s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":$validBody,"contexts":[$validContext]}}"""
+
+  private val bodySubject    = "com.myorg/page_view/1.0.0"
+  private val contextSubject = "com.myorg/user/1.0.0"
 
   // ---- Tests ----
 
   "POST /validate" should {
-
-    // -- 200 OK --
 
     "return 200 with valid=true for a valid envelope" in {
       val resp = post(validEnvelope)
@@ -77,103 +84,60 @@ class RoutesSpec extends Specification {
       (bodyJson(resp) \\ "valid").headOption must beSome(Json.True)
     }
 
-    // -- 400 Bad Request --
-
     "return 400 for malformed JSON" in {
       val resp = post("not-json")
       resp.status must beEqualTo(Status.BadRequest)
-      val body = bodyJson(resp)
-      (body \\ "valid").headOption must beSome(Json.False)
-      val types = (body \\ "type").map(_.asString.getOrElse(""))
-      types must contain("malformed_json")
+      (bodyJson(resp) \\ "valid").headOption must beSome(Json.False)
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("malformed_json")
     }
 
-    "return 400 for structurally invalid envelope" in {
-      val resp = post("""{"schema":"com.valistrio/envelope/1.0.0","data":{},"extra":"field"}""")
-      resp.status must beEqualTo(Status.BadRequest)
-      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
-      types must contain("structural_decode_error")
-    }
-
-    // -- 404 Not Found --
-
-    "return 404 when event schema is not in the registry" in {
-      val stub = new StubSchemaRegistry(
-        responses = Map("com.myorg/page_view/1.0.0" ->
-          Left(SchemaNotFound(SchemaRef.parse("com.myorg/page_view/1.0.0").toOption.get)))
-      )
-      val resp = post(validEnvelope, stub)
+    "return 404 when the body schema is not in the registry" in {
+      val resp = post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject))))
       resp.status must beEqualTo(Status.NotFound)
-      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
-      types must contain("schema_not_found")
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("schema_not_found")
     }
-
-    // -- 503 Service Unavailable --
 
     "return 503 when schema registry is unavailable" in {
       val stub = new StubSchemaRegistry(default = Left(SchemaRegistryUnavailable("connection refused")))
       post(validEnvelope, stub).status must beEqualTo(Status.ServiceUnavailable)
     }
 
-    // -- 504 Gateway Timeout --
-
     "return 504 when schema registry times out" in {
       val stub = new StubSchemaRegistry(default = Left(SchemaRegistryTimeout))
       post(validEnvelope, stub).status must beEqualTo(Status.GatewayTimeout)
     }
 
-    // -- 422 Unprocessable Entity --
-
-    "return 422 when event data fails schema validation" in {
+    "return 422 when the body fails schema validation" in {
       val err  = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string")))
-      val stub = new StubSchemaRegistry(
-        responses = Map("com.myorg/page_view/1.0.0" -> Left(err))
-      )
-      val resp = post(validEnvelope, stub)
+      val resp = post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> Left(err))))
       resp.status must beEqualTo(Status.UnprocessableEntity)
-      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
-      types must contain("schema_validation_failed")
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("schema_validation_failed")
     }
 
     "include path in validation failure errors" in {
       val err  = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string")))
-      val stub = new StubSchemaRegistry(
-        responses = Map("com.myorg/page_view/1.0.0" -> Left(err))
-      )
-      val body = bodyJson(post(validEnvelope, stub))
-      val paths = (body \\ "path").flatMap(_.asString)
-      paths must contain("$.page_url")
+      val body = bodyJson(post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> Left(err)))))
+      (body \\ "path").flatMap(_.asString) must contain("$.page_url")
     }
 
-    "include recoverable flag in the response error object" in {
+    "include the recoverable flag in the response error object" in {
       val err  = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "bad")))
-      val stub = new StubSchemaRegistry(
-        responses = Map("com.myorg/page_view/1.0.0" -> Left(err))
-      )
-      val body  = bodyJson(post(validEnvelope, stub))
-      val flags = (body \\ "recoverable").flatMap(_.asBoolean)
-      flags must contain(true)
+      val body = bodyJson(post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> Left(err)))))
+      (body \\ "recoverable").flatMap(_.asBoolean) must contain(true)
     }
 
-    // -- Status priority for mixed errors --
-
-    "prefer 404 over 422 when both schema_not_found and schema_validation_failed are present" in {
-      // envelope schema → not found; event schema → validation failure
-      val envelopeSubject = "com.valistrio/envelope/1.0.0"
-      val eventSubject    = "com.myorg/page_view/1.0.0"
+    "prefer 404 over 422 when a payload is not found and another fails validation" in {
       val stub = new StubSchemaRegistry(responses = Map(
-        envelopeSubject -> Left(SchemaNotFound(SchemaRef.parse(envelopeSubject).toOption.get)),
-        eventSubject    -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.x", "bad"))))
+        bodySubject    -> notFound(bodySubject),
+        contextSubject -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.x", "bad"))))
       ))
-      post(validEnvelope, stub).status must beEqualTo(Status.NotFound)
+      post(validEnvelopeWithContext, stub).status must beEqualTo(Status.NotFound)
     }
   }
 
   "POST /post" should {
 
-    // -- 200 OK --
-
-    "return 200 with written=true and write the envelope when validation succeeds" in {
+    "return 200 with written=true and write the event when validation succeeds" in {
       val sink = StubSink.succeeding.unsafeRunSync()
       val resp = postEnvelope(validEnvelope, sink = sink)
       resp.status must beEqualTo(Status.Ok)
@@ -181,58 +145,39 @@ class RoutesSpec extends Specification {
       sink.written.unsafeRunSync() must haveSize(1)
     }
 
-    // -- 400 Bad Request --
-
     "return 400 for malformed JSON" in {
       val resp = postEnvelope("not-json")
       resp.status must beEqualTo(Status.BadRequest)
-      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
-      types must contain("malformed_json")
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("malformed_json")
     }
 
-    // -- 404 Not Found (validation failure, same as /validate) --
-
-    "return 404 when event schema is not in the registry" in {
-      val stub = new StubSchemaRegistry(
-        responses = Map("com.myorg/page_view/1.0.0" ->
-          Left(SchemaNotFound(SchemaRef.parse("com.myorg/page_view/1.0.0").toOption.get)))
-      )
+    "return 404 when the body schema is not in the registry" in {
+      val stub = new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject)))
       postEnvelope(validEnvelope, registry = stub).status must beEqualTo(Status.NotFound)
     }
-
-    // -- 503 Service Unavailable --
 
     "return 503 when the sink is unreachable" in {
       val sink = StubSink.failingWith(Unavailable("connection refused")).unsafeRunSync()
       val resp = postEnvelope(validEnvelope, sink = sink)
       resp.status must beEqualTo(Status.ServiceUnavailable)
-      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
-      types must contain("sink_unavailable")
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("sink_unavailable")
     }
-
-    // -- 504 Gateway Timeout --
 
     "return 504 when the sink times out" in {
       val sink = StubSink.failingWith(Timeout).unsafeRunSync()
       postEnvelope(validEnvelope, sink = sink).status must beEqualTo(Status.GatewayTimeout)
     }
 
-    // -- 502 Bad Gateway --
-
     "return 502 when the sink write fails for an unmapped reason" in {
       val sink = StubSink.failingWith(WriteFailed("disk full")).unsafeRunSync()
       val resp = postEnvelope(validEnvelope, sink = sink)
       resp.status must beEqualTo(Status.BadGateway)
-      val types = (bodyJson(resp) \\ "type").map(_.asString.getOrElse(""))
-      types must contain("sink_write_failed")
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("sink_write_failed")
     }
 
-    "does not write to the sink when validation fails" in {
+    "not write to the sink when validation fails" in {
       val sink = StubSink.succeeding.unsafeRunSync()
-      val stub = new StubSchemaRegistry(
-        responses = Map("com.myorg/page_view/1.0.0" ->
-          Left(SchemaNotFound(SchemaRef.parse("com.myorg/page_view/1.0.0").toOption.get)))
-      )
+      val stub = new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject)))
       postEnvelope(validEnvelope, registry = stub, sink = sink)
       sink.written.unsafeRunSync() must beEmpty
     }

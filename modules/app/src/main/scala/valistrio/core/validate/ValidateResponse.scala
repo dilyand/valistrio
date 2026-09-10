@@ -49,9 +49,6 @@ object ValidateResponseError {
     case MalformedJson(message) =>
       NonEmptyList.one(ValidateResponseError("malformed_json", recoverable = false, path = None, message))
 
-    case StructuralDecodeError(message) =>
-      NonEmptyList.one(ValidateResponseError("structural_decode_error", recoverable = false, path = None, message))
-
     case SchemaNotFound(schemaName) =>
       NonEmptyList.one(ValidateResponseError("schema_not_found", recoverable = true, path = None, schemaName.toString))
 

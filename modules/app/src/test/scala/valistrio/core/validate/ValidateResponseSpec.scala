@@ -46,11 +46,6 @@ class ValidateResponseSpec extends Specification {
       errors.head.recoverable must beFalse
     }
 
-    "map StructuralDecodeError to a non-recoverable entry" in {
-      val errors = ValidateResponseError.from(StructuralDecodeError("unknown field"))
-      errors.head.`type` must beEqualTo("structural_decode_error")
-      errors.head.recoverable must beFalse
-    }
 
     "map SchemaNotFound to a recoverable entry" in {
       val name   = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))

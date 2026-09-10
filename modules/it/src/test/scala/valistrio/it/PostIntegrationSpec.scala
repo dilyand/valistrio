@@ -139,8 +139,8 @@ class PostIntegrationSpec
 
   // ---- Fixtures ----
 
-  private def envelope(eventId: String, eventData: String = """{"page_url":"https://example.com"}"""): String =
-    s"""{"schema":"com.valistrio/envelope/1.0.0","data":{"meta":{"event_id":"$eventId","produced_at":"2026-06-13T10:00:00Z"},"event":{"schema":"com.myorg/page_view/1.0.0","data":$eventData}}}"""
+  private def envelope(eventId: String, bodyData: String = """{"page_url":"https://example.com"}"""): String =
+    s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":{"event_id":"$eventId","produced_at":"2026-06-13T10:00:00Z"},"body":{"schema":"com.myorg/page_view/1.0.0","data":$bodyData}}}"""
 
   // ---- Tests ----
 
@@ -190,7 +190,7 @@ class PostIntegrationSpec
       schemaRegistry.stop()
       val eventId = "018f1e2a-dead-beef-cafe-000000000013"
       val body =
-        s"""{"schema":"com.valistrio/envelope/1.0.0","data":{"meta":{"event_id":"$eventId","produced_at":"2026-06-13T10:00:00Z"},"event":{"schema":"${freshSchemaName.toString}","data":{"x":"y"}}}}"""
+        s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":{"event_id":"$eventId","produced_at":"2026-06-13T10:00:00Z"},"body":{"schema":"${freshSchemaName.toString}","data":{"x":"y"}}}}"""
       post(body).map { case (status, respBody) =>
         (status must beEqualTo(Status.ServiceUnavailable)) and
           ((respBody \\ "type").flatMap(_.asString) must contain("schema_registry_unavailable"))

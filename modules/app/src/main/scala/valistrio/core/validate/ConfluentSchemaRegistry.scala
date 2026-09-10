@@ -93,7 +93,7 @@ object ConfluentSchemaRegistry {
   // ---- Startup seeding ----
 
   private val OwnedSchemas: List[SchemaRef] = List(
-    SchemaRef("com.valistrio", "envelope", SchemaVersion(1, 0, 0))
+    SchemaRef("io.github.dilyand.valistrio", "event", SchemaVersion(1, 0, 0))
   )
 
   private def loadSchemaJson(name: SchemaRef): IO[String] =
