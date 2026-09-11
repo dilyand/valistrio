@@ -1,5 +1,7 @@
 package valistrio.core.validate
 
+import cats.effect.unsafe.implicits.global
+import io.circe.parser
 import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
@@ -15,6 +17,16 @@ class ConfluentSchemaRegistrySpec extends Specification {
 
   // Expose the pure mapping for testing via a small helper that mirrors the impl.
   // We test by verifying the algebra contract on a stub implementation.
+
+  // Guards against a SchemaRef in OwnedSchemas drifting from its bundled resource file
+  // (the class of bug where seeding would fail only at startup).
+  "Owned schemas" should {
+    "each resolve to a bundled, well-formed JSON resource" in {
+      ConfluentSchemaRegistry.OwnedSchemas
+        .map(ref => parser.parse(ConfluentSchemaRegistry.loadSchemaJson(ref).unsafeRunSync()))
+        .forall(_.isRight) must beTrue
+    }
+  }
 
   "SchemaRegistry subject naming" should {
     "use SchemaRef.toString as the Confluent subject" in {

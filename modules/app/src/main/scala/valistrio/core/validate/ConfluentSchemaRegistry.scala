@@ -92,11 +92,11 @@ object ConfluentSchemaRegistry {
 
   // ---- Startup seeding ----
 
-  private val OwnedSchemas: List[SchemaRef] = List(
+  private[validate] val OwnedSchemas: List[SchemaRef] = List(
     SchemaRef("io.github.dilyand.valistrio", "event", SchemaVersion(1, 0, 0))
   )
 
-  private def loadSchemaJson(ref: SchemaRef): IO[String] =
+  private[validate] def loadSchemaJson(ref: SchemaRef): IO[String] =
     fs2.io
       .readClassLoaderResource[IO](s"schemas/${ref.group}/${ref.name}/${ref.version}.json")
       .through(text.utf8.decode)

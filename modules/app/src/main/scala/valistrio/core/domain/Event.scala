@@ -2,6 +2,7 @@ package valistrio.core.domain
 
 import cats.data.NonEmptyList
 import io.circe.{Decoder, Json}
+import io.circe.generic.semiauto.deriveDecoder
 
 /** The `data` object of an event: producer `meta`, the primary `body` payload, and
   * optional `contexts`. `meta` stays raw JSON — its shape is owned by the event schema,
@@ -24,13 +25,7 @@ final case class Event private (json: Json, schema: SchemaRef, data: EventData)
 
 object Event {
 
-  implicit private val eventDataDecoder: Decoder[EventData] = Decoder.instance { c =>
-    for {
-      meta     <- c.get[Json]("meta")
-      body     <- c.get[TypedData]("body")
-      contexts <- c.get[Option[List[TypedData]]]("contexts").map(_.flatMap(NonEmptyList.fromList))
-    } yield EventData(meta, body, contexts)
-  }
+  implicit private val eventDataDecoder: Decoder[EventData] = deriveDecoder[EventData]
 
   def fromJson(json: Json): Either[String, Event] =
     (for {
