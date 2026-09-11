@@ -1,9 +1,8 @@
-package valistrio.core.post
+package valistrio.core.domain
 
 import cats.data.NonEmptyList
 import io.circe.{Encoder, Json}
 import io.circe.syntax._
-import valistrio.core.http.ResponseError
 
 import java.nio.charset.StandardCharsets
 import java.time.Instant
@@ -14,13 +13,19 @@ import java.time.Instant
   * If the serialized `original` exceeds `maxBytes` it is dropped (`original` → `None`,
   * `truncated` → `true`) so the DLQ record stays within the inbound size limit — an oversized
   * payload is flagged, never silently lost.
+  *
+  * As a [[Writable]] its `json` is the wrapper below and its `key` is the original's `event_id`
+  * when available (a truncated or malformed original has none, so the record is written unkeyed).
   */
 final case class FailedEvent private (
   original: Option[Json],
   truncated: Boolean,
   errors: NonEmptyList[ResponseError],
   failedAt: Instant
-)
+) extends Writable {
+  def key: Option[String] = original.flatMap(FailedEvent.eventId)
+  def json: Json          = this.asJson
+}
 
 object FailedEvent {
 
@@ -28,6 +33,9 @@ object FailedEvent {
     val tooBig = original.noSpaces.getBytes(StandardCharsets.UTF_8).length > maxBytes
     FailedEvent(Option.unless(tooBig)(original), tooBig, errors, failedAt)
   }
+
+  private def eventId(original: Json): Option[String] =
+    original.hcursor.downField("data").downField("meta").get[String]("event_id").toOption
 
   implicit val encoder: Encoder[FailedEvent] = Encoder.instance { fe =>
     val base = Json.obj(

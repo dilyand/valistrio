@@ -12,9 +12,10 @@ import valistrio.core.ValistrioError.{SinkError, ValidateError}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.ValistrioError.SinkError._
-import valistrio.core.domain.{SchemaRef, ValidatedEvent}
-import valistrio.core.post.{DlqSink, PostService, Sink}
-import valistrio.core.validate.{SchemaRegistry, ValidateService}
+import valistrio.core.domain.{FailedEvent, SchemaRef, ValidatedEvent}
+import valistrio.core.post.PostService
+import valistrio.core.resources.{SchemaRegistry, Sink}
+import valistrio.core.validate.ValidateService
 
 class RoutesSpec extends Specification {
 
@@ -33,16 +34,16 @@ class RoutesSpec extends Specification {
     Left(SchemaNotFound(SchemaRef.parse(subject).toOption.get))
 
   /** Sink doubles that succeed silently or raise a configured SinkError; neither records. */
-  private def okSink: Sink                       = _ => IO.unit
-  private def failingSink(e: SinkError): Sink    = _ => IO.raiseError(e)
-  private def okDlq: DlqSink                      = _ => IO.unit
-  private def failingDlq(e: SinkError): DlqSink   = _ => IO.raiseError(e)
+  private def okSink: Sink[ValidatedEvent]                    = _ => IO.unit
+  private def failingSink(e: SinkError): Sink[ValidatedEvent] = _ => IO.raiseError(e)
+  private def okDlq: Sink[FailedEvent]                        = _ => IO.unit
+  private def failingDlq(e: SinkError): Sink[FailedEvent]     = _ => IO.raiseError(e)
 
   /** A recording events sink so tests can assert whether a write reached the events topic. */
-  private final class RecordingSink extends Sink {
-    private val store                            = scala.collection.mutable.ArrayBuffer.empty[ValidatedEvent]
-    def write(event: ValidatedEvent): IO[Unit]   = IO { store += event; () }
-    def count: Int                               = store.size
+  private final class RecordingSink extends Sink[ValidatedEvent] {
+    private val store                          = scala.collection.mutable.ArrayBuffer.empty[ValidatedEvent]
+    def write(event: ValidatedEvent): IO[Unit] = IO { store += event; () }
+    def count: Int                             = store.size
   }
 
   // ---- Helpers ----
@@ -60,14 +61,14 @@ class RoutesSpec extends Specification {
 
   private val MaxBytes = 2097152L
 
-  private def postApp(registry: SchemaRegistry, sink: Sink, dlqSink: DlqSink): HttpApp[IO] =
+  private def postApp(registry: SchemaRegistry, sink: Sink[ValidatedEvent], dlqSink: Sink[FailedEvent]): HttpApp[IO] =
     Routes.post(new PostService(new ValidateService(registry), sink, dlqSink, MaxBytes)).orNotFound
 
   private def postEnvelope(
     body: String,
     registry: SchemaRegistry = new StubSchemaRegistry(),
-    sink: Sink = okSink,
-    dlqSink: DlqSink = okDlq
+    sink: Sink[ValidatedEvent] = okSink,
+    dlqSink: Sink[FailedEvent] = okDlq
   ): Response[IO] = {
     val req = Request[IO](method = Method.POST, uri = uri"/post").withEntity(body)
     postApp(registry, sink, dlqSink).run(req).unsafeRunSync()

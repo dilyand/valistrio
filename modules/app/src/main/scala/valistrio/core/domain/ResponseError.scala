@@ -1,4 +1,4 @@
-package valistrio.core.http
+package valistrio.core.domain
 
 import cats.data.NonEmptyList
 import io.circe.{Encoder, Json}

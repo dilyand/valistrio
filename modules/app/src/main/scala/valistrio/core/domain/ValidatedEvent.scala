@@ -5,11 +5,13 @@ import io.circe.Json
 /** An event that has passed full validation — the event structure plus every payload
   * (`body` and each context) against its own schema.
   *
-  * It is the only thing a [[valistrio.core.post.Sink]] accepts, so an unvalidated write
-  * cannot be expressed. It carries the faithful original `json` (written to the sink
-  * verbatim) and the `eventId` used as the record key.
+  * As a [[Writable]] it is what a `Sink[ValidatedEvent]` (the events sink) accepts, so writing an
+  * unvalidated event there is a type error. It carries the faithful original `json` (written to the
+  * sink verbatim) and the `eventId` used as the record key.
   */
-final case class ValidatedEvent private (json: Json, eventId: String)
+final case class ValidatedEvent private (json: Json, eventId: String) extends Writable {
+  def key: Option[String] = Some(eventId)
+}
 
 object ValidatedEvent {
 

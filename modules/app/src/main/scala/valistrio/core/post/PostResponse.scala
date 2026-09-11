@@ -3,7 +3,7 @@ package valistrio.core.post
 import cats.data.NonEmptyList
 import io.circe.{Encoder, Json}
 import io.circe.syntax._
-import valistrio.core.http.ResponseError
+import valistrio.core.domain.ResponseError
 
 /** The outcome of POST /post. `/post` returns 200 exactly when Valistrio owns the event:
   *

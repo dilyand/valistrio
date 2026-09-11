@@ -1,4 +1,4 @@
-package valistrio.core.validate
+package valistrio.core.resources
 
 import cats.effect.unsafe.implicits.global
 import io.circe.parser

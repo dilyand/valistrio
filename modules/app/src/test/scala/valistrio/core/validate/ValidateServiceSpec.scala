@@ -9,6 +9,7 @@ import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.domain.SchemaRef
+import valistrio.core.resources.SchemaRegistry
 
 class ValidateServiceSpec extends Specification {
 

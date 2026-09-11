@@ -1,4 +1,4 @@
-package valistrio.core.validate
+package valistrio.core.resources
 
 import cats.data.NonEmptyList
 import cats.effect.{IO, Resource}
@@ -91,11 +91,11 @@ object ConfluentSchemaRegistry {
 
   // ---- Startup seeding ----
 
-  private[validate] val OwnedSchemas: List[SchemaRef] = List(
+  private[resources] val OwnedSchemas: List[SchemaRef] = List(
     SchemaRef("io.github.dilyand.valistrio", "event", SchemaVersion(1, 0, 0))
   )
 
-  private[validate] def loadSchemaJson(ref: SchemaRef): IO[String] =
+  private[resources] def loadSchemaJson(ref: SchemaRef): IO[String] =
     fs2.io
       .readClassLoaderResource[IO](s"schemas/${ref.group}/${ref.name}/${ref.version}.json")
       .through(text.utf8.decode)

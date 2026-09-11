@@ -4,14 +4,14 @@ import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.syntax.applicativeError._
 import io.circe.Json
-import valistrio.core.Disposition
 import valistrio.core.ValistrioError.{SinkError, ValidationErrors}
-import valistrio.core.http.ResponseError
+import valistrio.core.domain.{Disposition, FailedEvent, ResponseError, ValidatedEvent}
+import valistrio.core.resources.Sink
 import valistrio.core.validate.ValidateService
 
 /** Orchestrates the /post flow: parse, validate (reusing the shared [[ValidateService]]), then
-  * either write the [[valistrio.core.domain.ValidatedEvent]] to the events [[Sink]] or, when the
-  * event failed validation in a way Valistrio owns, salvage it to the [[DlqSink]].
+  * either write the [[ValidatedEvent]] to the events [[Sink]] or, when the event failed validation
+  * in a way Valistrio owns, salvage it to the DLQ sink.
   *
   * "Once we get it, we own it": an owned failure still returns 200 (`written` = `dlq`). Only a
   * transient infrastructure failure — the registry unreachable, the events write failing, or the
@@ -20,7 +20,12 @@ import valistrio.core.validate.ValidateService
   * `event_id` is the idempotency key for the written record; deduplicating repeated ids is the
   * sink's responsibility for 0.1.0 — PostService does not check for duplicates.
   */
-class PostService(validateService: ValidateService, sink: Sink, dlqSink: DlqSink, maxBytes: Long) {
+class PostService(
+  validateService: ValidateService,
+  eventSink: Sink[ValidatedEvent],
+  dlqSink: Sink[FailedEvent],
+  maxBytes: Long
+) {
 
   def post(rawBody: String): IO[PostResponse] =
     ValidateService.parse(rawBody) match {
@@ -35,7 +40,7 @@ class PostService(validateService: ValidateService, sink: Sink, dlqSink: DlqSink
             else
               toDlq(json, errors.flatMap(ResponseError.from))
           case Right(validated) =>
-            sink.write(validated).attemptNarrow[SinkError].map {
+            eventSink.write(validated).attemptNarrow[SinkError].map {
               case Right(())   => PostResponse.Written
               case Left(error) => PostResponse.Failed(NonEmptyList.one(ResponseError.fromSink(error)))
             }

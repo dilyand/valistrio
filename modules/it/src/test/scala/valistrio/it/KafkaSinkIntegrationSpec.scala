@@ -11,16 +11,15 @@ import org.specs2.mutable.Specification
 import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
 import valistrio.core.Config.{KafkaConfig, KafkaTopics}
-import valistrio.core.domain.{Event, ValidatedEvent}
-import valistrio.core.http.ResponseError
-import valistrio.core.post.{FailedEvent, KafkaDlqSink, KafkaSink}
+import valistrio.core.domain.{Event, FailedEvent, ResponseError, ValidatedEvent}
+import valistrio.core.resources.{Kafka, KafkaSink}
 import valistrio.it.containers.KafkaContainer
 
 import java.time.Instant
 import scala.concurrent.duration._
 
-/** Integration test for [[KafkaSink]] and [[KafkaDlqSink]] against a real Kafka broker,
-  * exercising the sink algebras directly in the test JVM through one shared producer.
+/** Integration test for the events and DLQ [[KafkaSink]]s against a real Kafka broker,
+  * exercising the sink algebra directly in the test JVM through one shared producer.
   */
 class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with CatsEffect {
 
@@ -82,8 +81,8 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
 
   "KafkaSink" should {
     "write a validated event so the original JSON can be read back from the topic" in {
-      KafkaSink.producer(config).use { producer =>
-        val sink = new KafkaSink(producer, EventsTopic)
+      Kafka.producer(config).use { producer =>
+        val sink = new KafkaSink[ValidatedEvent](producer, EventsTopic)
         for {
           _        <- sink.write(event)
           consumed <- consumeOne(EventsTopic)
@@ -94,10 +93,10 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
     }
   }
 
-  "KafkaDlqSink" should {
+  "The DLQ KafkaSink" should {
     "write a FailedEvent so its original and errors can be read back from the DLQ topic" in {
-      KafkaSink.producer(config).use { producer =>
-        val dlq = new KafkaDlqSink(producer, DlqTopic)
+      Kafka.producer(config).use { producer =>
+        val dlq = new KafkaSink[FailedEvent](producer, DlqTopic)
         for {
           _        <- dlq.write(failed)
           consumed <- consumeOne(DlqTopic)

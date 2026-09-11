@@ -15,7 +15,7 @@ import org.testcontainers.containers.Network
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.SchemaRegistryConfig
 import valistrio.core.domain.SchemaRef
-import valistrio.core.validate.ConfluentSchemaRegistry
+import valistrio.core.resources.ConfluentSchemaRegistry
 import valistrio.it.containers.{KafkaContainer, SchemaRegistryContainer, ValistrioContainer}
 
 import java.util.UUID

@@ -7,8 +7,8 @@ import cats.syntax.parallel._
 import io.circe.{Json, parser}
 import valistrio.core.ValistrioError.{ValidateError, ValidationErrors}
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{Event, SchemaRef, SchemaVersion, TypedData, ValidatedEvent}
-import valistrio.core.http.ResponseError
+import valistrio.core.domain.{Event, ResponseError, SchemaRef, SchemaVersion, TypedData, ValidatedEvent}
+import valistrio.core.resources.SchemaRegistry
 
 /** Orchestrates validation for /validate and /post.
   *

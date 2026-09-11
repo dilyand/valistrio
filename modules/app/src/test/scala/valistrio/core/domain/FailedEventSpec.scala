@@ -1,10 +1,9 @@
-package valistrio.core.post
+package valistrio.core.domain
 
 import cats.data.NonEmptyList
 import io.circe.Json
 import io.circe.syntax._
 import org.specs2.mutable.Specification
-import valistrio.core.http.ResponseError
 
 import java.time.Instant
 

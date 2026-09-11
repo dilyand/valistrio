@@ -1,4 +1,4 @@
-package valistrio.core.validate
+package valistrio.core.resources
 
 import cats.effect.IO
 import io.circe.Json

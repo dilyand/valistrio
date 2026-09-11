@@ -11,7 +11,7 @@ import java.net.ServerSocket
   *  - PLAINTEXT on [[BrokerPort]] — used by Schema Registry and other containers
   *    inside the Docker network via the `kafka` alias.
   *  - EXTERNAL on a fixed host port, advertised as `localhost:$externalPort` —
-  *    used by test code running directly on the host JVM (e.g. a [[valistrio.core.post.KafkaSink]]
+  *    used by test code running directly on the host JVM (e.g. a [[valistrio.core.resources.KafkaSink]]
   *    under test), which can't resolve the `kafka` network alias.
   *
   * A deterministic [[ClusterId]] is hardcoded so tests are reproducible.

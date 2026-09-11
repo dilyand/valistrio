@@ -8,10 +8,18 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
 import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
-import valistrio.core.post.{DlqSink, PostService, Sink}
-import valistrio.core.validate.{SchemaRegistry, ValidateService}
+import valistrio.core.domain.{FailedEvent, ValidatedEvent}
+import valistrio.core.post.PostService
+import valistrio.core.resources.{SchemaRegistry, Sink}
+import valistrio.core.validate.ValidateService
 
-class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry, sink: Sink, dlqSink: DlqSink, logger: Log4CatsLogger[IO]) {
+class Server(
+  conf: ServerConfig,
+  schemaRegistry: SchemaRegistry,
+  eventSink: Sink[ValidatedEvent],
+  dlqSink: Sink[FailedEvent],
+  logger: Log4CatsLogger[IO]
+) {
 
   def run: IO[Unit] =
     for {
@@ -22,7 +30,7 @@ class Server(conf: ServerConfig, schemaRegistry: SchemaRegistry, sink: Sink, dlq
 
   private def mkApp: HttpApp[IO] = {
     val validateService = new ValidateService(schemaRegistry)
-    val postService     = new PostService(validateService, sink, dlqSink, conf.maxBytes)
+    val postService     = new PostService(validateService, eventSink, dlqSink, conf.maxBytes)
     val routes          = Routes.health <+> Routes.validate(validateService) <+> Routes.post(postService)
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)

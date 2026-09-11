@@ -3,7 +3,7 @@ package valistrio.core.validate
 import cats.data.NonEmptyList
 import io.circe.{Encoder, Json}
 import io.circe.syntax._
-import valistrio.core.http.ResponseError
+import valistrio.core.domain.ResponseError
 
 /** The HTTP response body for POST /validate. */
 sealed trait ValidateResponse

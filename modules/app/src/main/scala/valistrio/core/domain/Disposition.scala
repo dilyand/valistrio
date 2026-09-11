@@ -1,4 +1,4 @@
-package valistrio.core
+package valistrio.core.domain
 
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
