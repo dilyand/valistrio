@@ -3,8 +3,9 @@ package valistrio.core.post
 import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.syntax.applicativeError._
-import valistrio.core.ValistrioError.{SinkError, ValidateError}
-import valistrio.core.validate.{ValidateResponseError, ValidateService}
+import valistrio.core.ValistrioError.{SinkError, ValidationErrors}
+import valistrio.core.http.ResponseError
+import valistrio.core.validate.ValidateService
 
 /** Orchestrates the /post flow: parse, validate (reusing the shared [[ValidateService]]),
   * then write the [[valistrio.core.domain.ValidatedEvent]] to the [[Sink]].
@@ -16,18 +17,16 @@ class PostService(validateService: ValidateService, sink: Sink) {
 
   def post(rawBody: String): IO[PostResponse] =
     ValidateService.parse(rawBody) match {
-      case Left(err) => IO.pure(PostResponse.Failure(toPostErrors(NonEmptyList.one(err))))
+      case Left(err) => IO.pure(PostResponse.Failure(ResponseError.from(err)))
       case Right(json) =>
-        validateService.validateEvent(json).flatMap {
-          case Left(errors) => IO.pure(PostResponse.Failure(toPostErrors(errors)))
+        validateService.validateEvent(json).attemptNarrow[ValidationErrors].flatMap {
+          case Left(ValidationErrors(errors)) =>
+            IO.pure(PostResponse.Failure(errors.flatMap(ResponseError.from)))
           case Right(validated) =>
             sink.write(validated).attemptNarrow[SinkError].map {
               case Right(())   => PostResponse.Written
-              case Left(error) => PostResponse.Failure(NonEmptyList.one(PostResponseError.fromSink(error)))
+              case Left(error) => PostResponse.Failure(NonEmptyList.one(ResponseError.fromSink(error)))
             }
         }
     }
-
-  private def toPostErrors(errors: NonEmptyList[ValidateError]): NonEmptyList[PostResponseError] =
-    errors.flatMap(e => ValidateResponseError.from(e).map(PostResponseError.fromValidate))
 }

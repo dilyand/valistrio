@@ -91,9 +91,9 @@ class RoutesSpec extends Specification {
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("malformed_json")
     }
 
-    "return 404 when the body schema is not in the registry" in {
+    "return 422 when the body schema is not registered" in {
       val resp = post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject))))
-      resp.status must beEqualTo(Status.NotFound)
+      resp.status must beEqualTo(Status.UnprocessableContent)
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("schema_not_found")
     }
 
@@ -110,7 +110,7 @@ class RoutesSpec extends Specification {
     "return 422 when the body fails schema validation" in {
       val err  = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string")))
       val resp = post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> Left(err))))
-      resp.status must beEqualTo(Status.UnprocessableEntity)
+      resp.status must beEqualTo(Status.UnprocessableContent)
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("schema_validation_failed")
     }
 
@@ -126,12 +126,12 @@ class RoutesSpec extends Specification {
       (body \\ "recoverable").flatMap(_.asBoolean) must contain(true)
     }
 
-    "prefer 404 over 422 when a payload is not found and another fails validation" in {
+    "return 422 when a referenced schema is missing, collected alongside a validation failure" in {
       val stub = new StubSchemaRegistry(responses = Map(
         bodySubject    -> notFound(bodySubject),
         contextSubject -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.x", "bad"))))
       ))
-      post(validEnvelopeWithContext, stub).status must beEqualTo(Status.NotFound)
+      post(validEnvelopeWithContext, stub).status must beEqualTo(Status.UnprocessableContent)
     }
   }
 
@@ -151,9 +151,9 @@ class RoutesSpec extends Specification {
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("malformed_json")
     }
 
-    "return 404 when the body schema is not in the registry" in {
+    "return 422 when the body schema is not registered" in {
       val stub = new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject)))
-      postEnvelope(validEnvelope, registry = stub).status must beEqualTo(Status.NotFound)
+      postEnvelope(validEnvelope, registry = stub).status must beEqualTo(Status.UnprocessableContent)
     }
 
     "return 503 when the sink is unreachable" in {

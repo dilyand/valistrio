@@ -10,6 +10,7 @@ import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.domain.SchemaRef
+import valistrio.core.http.ResponseError
 import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
 class PostServiceSpec extends Specification {
@@ -98,7 +99,7 @@ class PostServiceSpec extends Specification {
       val resp = run(stubOk, sink, validEnvelope)
       errorTypes(resp) must beEqualTo(List("sink_write_failed"))
       resp must beEqualTo(PostResponse.Failure(NonEmptyList.one(
-        PostResponseError("sink_write_failed", recoverable = true, path = None, "disk full")
+        ResponseError("sink_write_failed", recoverable = true, path = None, "disk full")
       )))
     }
 

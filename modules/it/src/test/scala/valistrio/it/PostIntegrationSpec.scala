@@ -175,7 +175,7 @@ class PostIntegrationSpec
       val invalidPayload = envelope(eventId, """{"not_page_url":"oops"}""")
       post(invalidPayload).flatMap { case (status, body) =>
         eventIdsOnTopic().map { ids =>
-          (status must beEqualTo(Status.UnprocessableEntity)) and
+          (status must beEqualTo(Status.UnprocessableContent)) and
             ((body \\ "type").flatMap(_.asString) must contain("schema_validation_failed")) and
             (ids must not(contain(eventId)))
         }

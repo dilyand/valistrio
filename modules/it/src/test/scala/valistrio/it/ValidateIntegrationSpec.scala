@@ -128,33 +128,33 @@ class ValidateIntegrationSpec
     "return 422 for an unknown field at the envelope level" in {
       val bad = s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}}},"unexpected":"field"}"""
       post(bad).map { case (status, body) =>
-        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
+        status must beEqualTo(Status.UnprocessableContent) and (errorTypes(body) must contain("schema_validation_failed"))
       }
     }
 
     "return 422 when the event body is missing" in {
       val bad = s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta}}"""
       post(bad).map { case (status, body) =>
-        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
+        status must beEqualTo(Status.UnprocessableContent) and (errorTypes(body) must contain("schema_validation_failed"))
       }
     }
 
     "return 422 for an empty contexts array" in {
       val bad = s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":$validMeta,"body":{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}},"contexts":[]}}"""
       post(bad).map { case (status, body) =>
-        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
+        status must beEqualTo(Status.UnprocessableContent) and (errorTypes(body) must contain("schema_validation_failed"))
       }
     }
 
-    "return 404 when the body schema is not registered" in {
+    "return 422 when the body schema is not registered" in {
       post(unknownSchemaEnvelope).map { case (status, body) =>
-        status must beEqualTo(Status.NotFound) and (errorTypes(body) must contain("schema_not_found"))
+        status must beEqualTo(Status.UnprocessableContent) and (errorTypes(body) must contain("schema_not_found"))
       }
     }
 
     "return 422 when the payload violates its registered schema" in {
       post(invalidPayloadEnvelope).map { case (status, body) =>
-        status must beEqualTo(Status.UnprocessableEntity) and (errorTypes(body) must contain("schema_validation_failed"))
+        status must beEqualTo(Status.UnprocessableContent) and (errorTypes(body) must contain("schema_validation_failed"))
       }
     }
 

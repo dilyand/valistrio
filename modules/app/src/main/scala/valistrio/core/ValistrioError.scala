@@ -55,6 +55,13 @@ object ValistrioError {
   /** An individual schema validation error, produced by the JSON Schema validator. */
   final case class ValidationError(path: String, message: String)
 
+  /** Aggregate raised by the validate service when an event fails validation — carries every
+    * collected per-payload [[ValidateError]]. Recovered at the HTTP boundary to build the response.
+    */
+  final case class ValidationErrors(errors: NonEmptyList[ValidateError]) extends ValistrioError {
+    val msg = s"Event failed validation with ${errors.size} error(s)."
+  }
+
   sealed trait SinkError extends ValistrioError
   final object SinkError {
     final case class Unavailable(cause: String) extends SinkError {
