@@ -1,8 +1,10 @@
 package valistrio.core.post
 
 import cats.effect.unsafe.implicits.global
+import cats.syntax.applicativeError._
 import io.circe.parser
 import org.specs2.mutable.Specification
+import valistrio.core.ValistrioError.SinkError
 import valistrio.core.ValistrioError.SinkError.WriteFailed
 import valistrio.core.domain.{Event, ValidatedEvent}
 
@@ -14,10 +16,10 @@ class StubSinkSpec extends Specification {
   private val event: ValidatedEvent = ValidatedEvent.of(Event.fromJson(json).toOption.get).toOption.get
 
   "StubSink.succeeding" should {
-    "record writes and report success" in {
+    "record writes and succeed" in {
       val (result, written) = (for {
         sink    <- StubSink.succeeding
-        result  <- sink.write(event)
+        result  <- sink.write(event).attemptNarrow[SinkError]
         written <- sink.written
       } yield (result, written)).unsafeRunSync()
 
@@ -27,14 +29,14 @@ class StubSinkSpec extends Specification {
   }
 
   "StubSink.failingWith" should {
-    "record the write but report the configured error" in {
+    "record the write but raise the configured error" in {
       val (result, written) = (for {
         sink    <- StubSink.failingWith(WriteFailed("boom"))
-        result  <- sink.write(event)
+        result  <- sink.write(event).attemptNarrow[SinkError]
         written <- sink.written
       } yield (result, written)).unsafeRunSync()
 
-      result must beLeft(WriteFailed("boom"))
+      result must beLeft(WriteFailed("boom"): SinkError)
       written must beEqualTo(Vector(event))
     }
   }

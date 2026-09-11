@@ -24,9 +24,9 @@ class RoutesSpec extends Specification {
     responses: Map[String, Either[ValidateError, Unit]] = Map.empty,
     default: Either[ValidateError, Unit] = Right(())
   ) extends SchemaRegistry {
-    def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
-      IO.pure(responses.getOrElse(name.toString, default))
-    def register(name: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
+    def validate(ref: SchemaRef, data: Json): IO[Unit] =
+      IO.fromEither(responses.getOrElse(ref.toString, default))
+    def register(ref: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
   }
 
   private def notFound(subject: String): Either[ValidateError, Unit] =

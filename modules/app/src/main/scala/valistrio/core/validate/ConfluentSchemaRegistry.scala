@@ -2,6 +2,8 @@ package valistrio.core.validate
 
 import cats.data.NonEmptyList
 import cats.effect.{IO, Resource}
+import cats.syntax.applicativeError._
+import cats.syntax.flatMap._
 import cats.syntax.foldable._
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.networknt.schema.{JsonSchemaFactory, SpecVersion}
@@ -22,22 +24,45 @@ import java.util.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
+/** A [[SchemaRegistry]] backed by a [[CachedSchemaRegistryClient]]. Failures are raised as a
+  * [[ValidateError]] on the IO error channel (see [[withTimeout]]).
+  */
+final class ConfluentSchemaRegistry private (client: SchemaRegistryClient, timeout: FiniteDuration)
+    extends SchemaRegistry {
+
+  import ConfluentSchemaRegistry._
+
+  def validate(ref: SchemaRef, data: Json): IO[Unit] =
+    withTimeout(ref, timeout, IO.blocking {
+      val rawSchema  = client.getLatestSchemaMetadata(ref.toString).getSchema
+      val schemaNode = mapper.readTree(rawSchema)
+      val schema     = jsonSchemaFactory.getSchema(schemaNode)
+      val dataNode   = mapper.readTree(data.noSpaces)
+      schema.validate(dataNode).asScala.toList
+    }).flatMap { messages =>
+      NonEmptyList.fromList(messages.map(m => ValidationError(m.getPath, m.getMessage))) match {
+        case None      => IO.unit
+        case Some(nel) => IO.raiseError(ValidationFailed(nel))
+      }
+    }
+
+  def register(ref: SchemaRef, schemaJson: String): IO[Unit] =
+    IO.blocking(client.register(ref.toString, new JsonSchema(schemaJson))).void
+}
+
 object ConfluentSchemaRegistry {
 
   private val SchemaRegistryCacheCapacity = 2000
   private val mapper                      = new ObjectMapper
   private val jsonSchemaFactory           = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7)
 
-  /** Creates a [[SchemaRegistry]] backed by a [[CachedSchemaRegistryClient]].
+  /** On acquisition, seeds all Valistrio-owned schemas and fails (preventing startup) if the
+    * registry is unreachable during seeding.
     *
-    * On resource acquisition, seeds all Valistrio-owned schemas and fails (preventing
-    * startup) if the registry is unreachable during seeding.
-    *
-    * The [[RestService]]'s own connect/read timeouts are set to `config.timeoutMs`,
-    * matching the `IO.timeout` around every call: cancelling a fiber does not interrupt
-    * a blocking native call underneath it, so without the client-level timeout a network
-    * partition would block on the JVM's default blocking-IO timeout (tens of seconds)
-    * before `IO.timeout` could act.
+    * The [[RestService]]'s own connect/read timeouts are set to `config.timeoutMs`, matching the
+    * `IO.timeout` around every call: cancelling a fiber does not interrupt a blocking native call
+    * underneath it, so without the client-level timeout a network partition would block on the
+    * JVM's default blocking-IO timeout before `IO.timeout` could act.
     */
   def resource(config: SchemaRegistryConfig)(implicit logger: Logger[IO]): Resource[IO, SchemaRegistry] =
     Resource.fromAutoCloseable(IO {
@@ -46,45 +71,20 @@ object ConfluentSchemaRegistry {
       restService.setHttpReadTimeoutMs(config.timeoutMs)
       new CachedSchemaRegistryClient(restService, SchemaRegistryCacheCapacity)
     }).evalMap { client =>
-      val registry = confluentRegistry(client, config.timeoutMs.millis)
-      seedOwnedSchemas(registry).as(registry)
+      val registry = new ConfluentSchemaRegistry(client, config.timeoutMs.millis)
+      seedOwnedSchemas(registry).as(registry: SchemaRegistry)
     }
 
-  private def confluentRegistry(client: SchemaRegistryClient, timeout: FiniteDuration): SchemaRegistry =
-    new SchemaRegistry {
-      def validate(name: SchemaRef, data: Json): IO[Either[ValidateError, Unit]] =
-        withTimeout(name, timeout, IO.blocking {
-          val rawSchema  = client.getLatestSchemaMetadata(name.toString).getSchema
-          val schemaNode = mapper.readTree(rawSchema)
-          val schema     = jsonSchemaFactory.getSchema(schemaNode)
-          val dataNode   = mapper.readTree(data.noSpaces)
-          schema.validate(dataNode).asScala.toList
-        }).map {
-          case Left(err) => Left(err)
-          case Right(messages) =>
-            NonEmptyList.fromList(messages.map(m => ValidationError(m.getPath, m.getMessage))) match {
-              case None      => Right(())
-              case Some(nel) => Left(ValidationFailed(nel))
-            }
-        }
-
-      def register(name: SchemaRef, schemaJson: String): IO[Unit] =
-        IO.blocking(client.register(name.toString, new JsonSchema(schemaJson))).void
+  private def withTimeout[A](ref: SchemaRef, timeout: FiniteDuration, action: IO[A]): IO[A] =
+    action.timeout(timeout).adaptError {
+      case _: TimeoutException    => SchemaRegistryTimeout
+      case e: RestClientException => mapRestClientException(e, ref)
+      case e: IOException         => SchemaRegistryUnavailable(e.getMessage)
     }
 
-  private def withTimeout[A](name: SchemaRef, timeout: FiniteDuration, action: IO[A]): IO[Either[ValidateError, A]] =
-    action
-      .timeout(timeout)
-      .map(Right(_): Either[ValidateError, A])
-      .recoverWith {
-        case _: TimeoutException    => IO.pure(Left(SchemaRegistryTimeout))
-        case e: RestClientException => IO.pure(Left(mapRestClientException(e, name)))
-        case e: IOException         => IO.pure(Left(SchemaRegistryUnavailable(e.getMessage)))
-      }
-
-  private def mapRestClientException(e: RestClientException, name: SchemaRef): ValidateError =
+  private def mapRestClientException(e: RestClientException, ref: SchemaRef): ValidateError =
     e.getStatus match {
-      case 404       => SchemaNotFound(name)
+      case 404       => SchemaNotFound(ref)
       case 408       => SchemaRegistryTimeout
       case 503 | 504 => SchemaRegistryUnavailable(e.getMessage)
       case _         => SchemaRegistryUnavailable(e.getMessage)
@@ -96,20 +96,17 @@ object ConfluentSchemaRegistry {
     SchemaRef("io.github.dilyand.valistrio", "event", SchemaVersion(1, 0, 0))
   )
 
-  private def loadSchemaJson(name: SchemaRef): IO[String] =
+  private def loadSchemaJson(ref: SchemaRef): IO[String] =
     fs2.io
-      .readClassLoaderResource[IO](s"schemas/${name.group}/${name.name}/${name.version}.json")
+      .readClassLoaderResource[IO](s"schemas/${ref.group}/${ref.name}/${ref.version}.json")
       .through(text.utf8.decode)
       .compile
       .string
 
   private def seedOwnedSchemas(registry: SchemaRegistry)(implicit logger: Logger[IO]): IO[Unit] =
-    OwnedSchemas.traverse_ { name =>
-      for {
-        _          <- logger.info(s"Seeding schema: $name")
-        schemaJson <- loadSchemaJson(name)
-        _          <- registry.register(name, schemaJson)
-        _          <- logger.info(s"Schema seeded: $name")
-      } yield ()
+    OwnedSchemas.traverse_ { ref =>
+      logger.info(s"Seeding schema: $ref") >>
+        loadSchemaJson(ref).flatMap(registry.register(ref, _)) >>
+        logger.info(s"Schema seeded: $ref")
     }
 }

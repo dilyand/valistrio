@@ -1,14 +1,13 @@
 package valistrio.core.post
 
 import cats.effect.IO
-import valistrio.core.ValistrioError.SinkError
 import valistrio.core.domain.ValidatedEvent
 
-/** Algebra for writing a validated event to a downstream transport. */
+/** Algebra for writing a validated event to a downstream transport.
+  *
+  * A write failure is raised as a [[valistrio.core.ValistrioError.SinkError]] on the IO
+  * error channel; the caller recovers it (e.g. to route the event to the DLQ).
+  */
 trait Sink {
-
-  /** Write `event`. A [[SinkError]] on the Left means the write could not be completed;
-    * the caller routes the event to the DLQ (see CLAUDE.md for the DLQ format).
-    */
-  def write(event: ValidatedEvent): IO[Either[SinkError, Unit]]
+  def write(event: ValidatedEvent): IO[Unit]
 }

@@ -69,12 +69,11 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
     "write a validated event so the original JSON can be read back from the topic" in {
       KafkaSink.resource(config).use { sink =>
         for {
-          result   <- sink.write(event)
+          _        <- sink.write(event)
           consumed <- consumeOne
-        } yield result -> consumed
-      }.map { case (result, consumed) =>
-        (result must beRight(())) and
-          (parser.parse(consumed).toOption must beSome(json))
+        } yield consumed
+      }.map { consumed =>
+        parser.parse(consumed).toOption must beSome(json)
       }
     }
   }

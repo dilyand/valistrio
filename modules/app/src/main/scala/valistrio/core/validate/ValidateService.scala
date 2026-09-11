@@ -2,6 +2,7 @@ package valistrio.core.validate
 
 import cats.data.NonEmptyList
 import cats.effect.IO
+import cats.syntax.applicativeError._
 import cats.syntax.parallel._
 import io.circe.{Json, parser}
 import valistrio.core.ValistrioError.ValidateError
@@ -31,7 +32,7 @@ class ValidateService(registry: SchemaRegistry) {
     * [[ValidatedEvent]] on success or every collected [[ValidateError]] on failure.
     */
   def validateEvent(json: Json): IO[Either[NonEmptyList[ValidateError], ValidatedEvent]] =
-    registry.validate(EventSchemaRef, json).flatMap {
+    registry.validate(EventSchemaRef, json).attemptNarrow[ValidateError].flatMap {
       case Left(err) => IO.pure(Left(NonEmptyList.one(err)))
       case Right(()) =>
         Event.fromJson(json) match {
@@ -39,7 +40,7 @@ class ValidateService(registry: SchemaRegistry) {
             IO.raiseError(new IllegalStateException(s"Event passed its schema but could not be extracted: $bug"))
           case Right(event) =>
             val payloads = event.data.body :: event.data.contexts.fold(List.empty[TypedData])(_.toList)
-            payloads.parTraverse(td => registry.validate(td.schema, td.data)).flatMap { results =>
+            payloads.parTraverse(td => registry.validate(td.schema, td.data).attemptNarrow[ValidateError]).flatMap { results =>
               NonEmptyList.fromList(results.collect { case Left(e) => e }) match {
                 case Some(errors) => IO.pure(Left(errors))
                 case None =>
