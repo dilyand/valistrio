@@ -2,7 +2,7 @@ package valistrio.core.validate
 
 import cats.data.NonEmptyList
 import org.specs2.mutable.Specification
-import valistrio.core.ValistrioError.{ValidateError, ValidationError}
+import valistrio.core.ValistrioError.{ValidateError, ValidationError, ValidationErrors}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
@@ -50,6 +50,16 @@ class ValidateErrorSpec extends Specification {
     "ValidationFailed is a ValidateError" in {
       val e = ValidationFailed(NonEmptyList.one(ValidationError("$", "x")))
       (e: ValidateError) must beAnInstanceOf[ValidateError]
+    }
+
+    "ValidationErrors msg lists the underlying errors, not just a count" in {
+      val ref = SchemaRef("com.myorg", "user", SchemaVersion(1, 0, 0))
+      val agg = ValidationErrors(NonEmptyList.of(
+        ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string"))),
+        SchemaNotFound(ref)
+      ))
+      agg.msg must contain("$.page_url: must be a string")
+      agg.msg must contain("com.myorg/user/1.0.0")
     }
   }
 }

@@ -59,7 +59,15 @@ object ValistrioError {
     * collected per-payload [[ValidateError]]. Recovered at the HTTP boundary to build the response.
     */
   final case class ValidationErrors(errors: NonEmptyList[ValidateError]) extends ValistrioError {
-    val msg = s"Event failed validation with ${errors.size} error(s)."
+    val msg: String = {
+      val details = errors.toList.flatMap {
+        case ValidateError.ValidationFailed(fieldErrors) => fieldErrors.toList.map(fe => s"${fe.path}: ${fe.message}")
+        case other                                       => List(other.msg)
+      }
+      val rendered  = details.mkString("; ")
+      val truncated = if (rendered.length > 512) rendered.take(512) + "…" else rendered
+      s"Event failed validation with ${errors.size} error(s): $truncated"
+    }
   }
 
   sealed trait SinkError extends ValistrioError
