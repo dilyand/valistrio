@@ -8,12 +8,12 @@ import io.circe.parser
 import org.http4s._
 import org.http4s.implicits._
 import org.specs2.mutable.Specification
-import valistrio.core.ValistrioError.ValidateError
+import valistrio.core.ValistrioError.{SinkError, ValidateError}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.ValistrioError.SinkError._
-import valistrio.core.domain.SchemaRef
-import valistrio.core.post.{PostService, Sink, StubSink}
+import valistrio.core.domain.{SchemaRef, ValidatedEvent}
+import valistrio.core.post.{DlqSink, PostService, Sink}
 import valistrio.core.validate.{SchemaRegistry, ValidateService}
 
 class RoutesSpec extends Specification {
@@ -32,6 +32,19 @@ class RoutesSpec extends Specification {
   private def notFound(subject: String): Either[ValidateError, Unit] =
     Left(SchemaNotFound(SchemaRef.parse(subject).toOption.get))
 
+  /** Sink doubles that succeed silently or raise a configured SinkError; neither records. */
+  private def okSink: Sink                       = _ => IO.unit
+  private def failingSink(e: SinkError): Sink    = _ => IO.raiseError(e)
+  private def okDlq: DlqSink                      = _ => IO.unit
+  private def failingDlq(e: SinkError): DlqSink   = _ => IO.raiseError(e)
+
+  /** A recording events sink so tests can assert whether a write reached the events topic. */
+  private final class RecordingSink extends Sink {
+    private val store                            = scala.collection.mutable.ArrayBuffer.empty[ValidatedEvent]
+    def write(event: ValidatedEvent): IO[Unit]   = IO { store += event; () }
+    def count: Int                               = store.size
+  }
+
   // ---- Helpers ----
 
   private def app(registry: SchemaRegistry = new StubSchemaRegistry()): HttpApp[IO] =
@@ -45,16 +58,19 @@ class RoutesSpec extends Specification {
   private def bodyJson(resp: Response[IO]): Json =
     parser.parse(resp.as[String].unsafeRunSync()).toOption.get
 
-  private def postApp(registry: SchemaRegistry, sink: Sink): HttpApp[IO] =
-    Routes.post(new PostService(new ValidateService(registry), sink)).orNotFound
+  private val MaxBytes = 2097152L
+
+  private def postApp(registry: SchemaRegistry, sink: Sink, dlqSink: DlqSink): HttpApp[IO] =
+    Routes.post(new PostService(new ValidateService(registry), sink, dlqSink, MaxBytes)).orNotFound
 
   private def postEnvelope(
     body: String,
     registry: SchemaRegistry = new StubSchemaRegistry(),
-    sink: Sink = StubSink.succeeding.unsafeRunSync()
+    sink: Sink = okSink,
+    dlqSink: DlqSink = okDlq
   ): Response[IO] = {
     val req = Request[IO](method = Method.POST, uri = uri"/post").withEntity(body)
-    postApp(registry, sink).run(req).unsafeRunSync()
+    postApp(registry, sink, dlqSink).run(req).unsafeRunSync()
   }
 
   // ---- Fixtures ----
@@ -137,49 +153,62 @@ class RoutesSpec extends Specification {
 
   "POST /post" should {
 
-    "return 200 with written=true and write the event when validation succeeds" in {
-      val sink = StubSink.succeeding.unsafeRunSync()
+    "return 200 accepted with written=events and write the event when validation succeeds" in {
+      val sink = new RecordingSink
       val resp = postEnvelope(validEnvelope, sink = sink)
       resp.status must beEqualTo(Status.Ok)
-      (bodyJson(resp) \\ "written").headOption must beSome(Json.True)
-      sink.written.unsafeRunSync() must haveSize(1)
+      (bodyJson(resp) \\ "accepted").headOption must beSome(Json.True)
+      (bodyJson(resp) \\ "written").flatMap(_.asString) must contain("events")
+      sink.count must beEqualTo(1)
     }
 
-    "return 400 for malformed JSON" in {
+    "return 200 accepted with written=dlq for malformed JSON (owned, salvaged to the DLQ)" in {
       val resp = postEnvelope("not-json")
-      resp.status must beEqualTo(Status.BadRequest)
+      resp.status must beEqualTo(Status.Ok)
+      (bodyJson(resp) \\ "accepted").headOption must beSome(Json.True)
+      (bodyJson(resp) \\ "written").flatMap(_.asString) must contain("dlq")
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("malformed_json")
     }
 
-    "return 422 when the body schema is not registered" in {
+    "return 200 accepted with written=dlq, without writing to the events sink, when the body schema is not registered" in {
+      val sink = new RecordingSink
       val stub = new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject)))
-      postEnvelope(validEnvelope, registry = stub).status must beEqualTo(Status.UnprocessableContent)
+      val resp = postEnvelope(validEnvelope, registry = stub, sink = sink)
+      resp.status must beEqualTo(Status.Ok)
+      (bodyJson(resp) \\ "written").flatMap(_.asString) must contain("dlq")
+      sink.count must beEqualTo(0)
     }
 
-    "return 503 when the sink is unreachable" in {
-      val sink = StubSink.failingWith(Unavailable("connection refused")).unsafeRunSync()
-      val resp = postEnvelope(validEnvelope, sink = sink)
+    "return 503 accepted=false when the registry is unavailable (Retry, not DLQ'd)" in {
+      val stub = new StubSchemaRegistry(default = Left(SchemaRegistryUnavailable("connection refused")))
+      val resp = postEnvelope(validEnvelope, registry = stub)
+      resp.status must beEqualTo(Status.ServiceUnavailable)
+      (bodyJson(resp) \\ "accepted").headOption must beSome(Json.False)
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("schema_registry_unavailable")
+    }
+
+    "return 503 when the events sink is unreachable" in {
+      val resp = postEnvelope(validEnvelope, sink = failingSink(Unavailable("connection refused")))
       resp.status must beEqualTo(Status.ServiceUnavailable)
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("sink_unavailable")
     }
 
-    "return 504 when the sink times out" in {
-      val sink = StubSink.failingWith(Timeout).unsafeRunSync()
-      postEnvelope(validEnvelope, sink = sink).status must beEqualTo(Status.GatewayTimeout)
+    "return 504 when the events sink times out" in {
+      postEnvelope(validEnvelope, sink = failingSink(Timeout)).status must beEqualTo(Status.GatewayTimeout)
     }
 
-    "return 502 when the sink write fails for an unmapped reason" in {
-      val sink = StubSink.failingWith(WriteFailed("disk full")).unsafeRunSync()
-      val resp = postEnvelope(validEnvelope, sink = sink)
+    "return 502 when the events sink write fails for an unmapped reason" in {
+      val resp = postEnvelope(validEnvelope, sink = failingSink(WriteFailed("disk full")))
       resp.status must beEqualTo(Status.BadGateway)
       (bodyJson(resp) \\ "type").flatMap(_.asString) must contain("sink_write_failed")
     }
 
-    "not write to the sink when validation fails" in {
-      val sink = StubSink.succeeding.unsafeRunSync()
+    "return 503 accepted=false when an owned failure cannot be DLQ'd because the DLQ is down" in {
       val stub = new StubSchemaRegistry(responses = Map(bodySubject -> notFound(bodySubject)))
-      postEnvelope(validEnvelope, registry = stub, sink = sink)
-      sink.written.unsafeRunSync() must beEmpty
+      val resp = postEnvelope(validEnvelope, registry = stub, dlqSink = failingDlq(Unavailable("dlq down")))
+      resp.status must beEqualTo(Status.ServiceUnavailable)
+      (bodyJson(resp) \\ "accepted").headOption must beSome(Json.False)
+      (bodyJson(resp) \\ "type").flatMap(_.asString) must beEqualTo(List("sink_unavailable"))
     }
   }
 }

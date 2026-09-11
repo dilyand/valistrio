@@ -43,7 +43,8 @@ class PostIntegrationSpec
 
   // ---- Infrastructure ----
 
-  private val Topic = "valistrio.events"
+  private val Topic    = "valistrio.events"
+  private val DlqTopic = "valistrio.dlq"
 
   private val network        = Network.newNetwork()
   private val kafka          = new KafkaContainer(network)
@@ -82,7 +83,7 @@ class PostIntegrationSpec
 
   override def beforeAll(): Unit = {
     kafka.start()
-    createTopic().unsafeRunSync()
+    createTopics().unsafeRunSync()
     schemaRegistry.start()
 
     implicit val logger = Slf4jLogger.getLogger[IO]
@@ -104,10 +105,13 @@ class PostIntegrationSpec
     network.close()
   }
 
-  private def createTopic(): IO[Unit] =
+  private def createTopics(): IO[Unit] =
     KafkaAdminClient
       .resource[IO](AdminClientSettings(kafka.externalBootstrap))
-      .use(_.createTopic(new NewTopic(Topic, 1, 1.toShort)))
+      .use { admin =>
+        admin.createTopic(new NewTopic(Topic, 1, 1.toShort)) >>
+          admin.createTopic(new NewTopic(DlqTopic, 1, 1.toShort))
+      }
 
   // ---- Helpers ----
 
@@ -122,20 +126,20 @@ class PostIntegrationSpec
     * using a fresh consumer group each call so repeated calls don't miss messages
     * already consumed by an earlier call in the same test run.
     */
-  private def messagesOnTopic(window: FiniteDuration = 5.seconds): IO[List[Json]] = {
+  private def messagesOnTopic(topic: String, window: FiniteDuration = 5.seconds): IO[List[Json]] = {
     val settings = ConsumerSettings[IO, String, String]
       .withBootstrapServers(kafka.externalBootstrap)
       .withGroupId(s"valistrio-it-post-${UUID.randomUUID()}")
       .withAutoOffsetReset(AutoOffsetReset.Earliest)
 
     KafkaConsumer.resource(settings).use { consumer =>
-      consumer.subscribeTo(Topic) >>
+      consumer.subscribeTo(topic) >>
         consumer.stream.map(_.record.value).interruptAfter(window).compile.toList
     }.map(_.flatMap(parser.parse(_).toOption))
   }
 
   private def eventIdsOnTopic(window: FiniteDuration = 5.seconds): IO[List[String]] =
-    messagesOnTopic(window).map(_.flatMap(j => (j \\ "event_id").flatMap(_.asString)))
+    messagesOnTopic(Topic, window).map(_.flatMap(j => (j \\ "event_id").flatMap(_.asString)))
 
   // ---- Fixtures ----
 
@@ -146,12 +150,13 @@ class PostIntegrationSpec
 
   "POST /post (containerised)" should {
 
-    "return 200 and write the message to the configured Kafka topic" in {
+    "return 200 accepted with written=events and write the message to the configured Kafka topic" in {
       val eventId = "018f1e2a-dead-beef-cafe-000000000010"
       post(envelope(eventId)).flatMap { case (status, body) =>
         eventIdsOnTopic().map { ids =>
           (status must beEqualTo(Status.Ok)) and
-            ((body \\ "written").headOption must beSome(Json.True)) and
+            ((body \\ "accepted").headOption must beSome(Json.True)) and
+            ((body \\ "written").flatMap(_.asString) must contain("events")) and
             (ids must contain(eventId))
         }
       }
@@ -170,14 +175,22 @@ class PostIntegrationSpec
       }
     }
 
-    "return 422 and not write to Kafka when the payload fails schema validation" in {
+    "return 200 accepted with written=dlq and salvage the failed event to the DLQ topic when the payload fails schema validation" in {
       val eventId = "018f1e2a-dead-beef-cafe-000000000012"
       val invalidPayload = envelope(eventId, """{"not_page_url":"oops"}""")
       post(invalidPayload).flatMap { case (status, body) =>
-        eventIdsOnTopic().map { ids =>
-          (status must beEqualTo(Status.UnprocessableContent)) and
+        for {
+          eventIds <- eventIdsOnTopic()
+          dlq      <- messagesOnTopic(DlqTopic)
+        } yield {
+          val originals = dlq.flatMap(r => (r \\ "original").headOption)
+          (status must beEqualTo(Status.Ok)) and
+            ((body \\ "accepted").headOption must beSome(Json.True)) and
+            ((body \\ "written").flatMap(_.asString) must contain("dlq")) and
             ((body \\ "type").flatMap(_.asString) must contain("schema_validation_failed")) and
-            (ids must not(contain(eventId)))
+            (eventIds must not(contain(eventId))) and
+            (originals.flatMap(o => (o \\ "event_id").flatMap(_.asString)) must contain(eventId)) and
+            (dlq.flatMap(r => (r \\ "type").flatMap(_.asString)) must contain("schema_validation_failed"))
         }
       }
     }
@@ -193,6 +206,7 @@ class PostIntegrationSpec
         s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":{"event_id":"$eventId","produced_at":"2026-06-13T10:00:00Z"},"body":{"schema":"${freshSchemaName.toString}","data":{"x":"y"}}}}"""
       post(body).map { case (status, respBody) =>
         (status must beEqualTo(Status.ServiceUnavailable)) and
+          ((respBody \\ "accepted").headOption must beSome(Json.False)) and
           ((respBody \\ "type").flatMap(_.asString) must contain("schema_registry_unavailable"))
       }
     }

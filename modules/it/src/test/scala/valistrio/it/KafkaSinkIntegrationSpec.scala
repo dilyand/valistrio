@@ -1,5 +1,6 @@
 package valistrio.it
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.unsafe.implicits.global
@@ -11,13 +12,15 @@ import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
 import valistrio.core.Config.{KafkaConfig, KafkaTopics}
 import valistrio.core.domain.{Event, ValidatedEvent}
-import valistrio.core.post.KafkaSink
+import valistrio.core.http.ResponseError
+import valistrio.core.post.{FailedEvent, KafkaDlqSink, KafkaSink}
 import valistrio.it.containers.KafkaContainer
 
+import java.time.Instant
 import scala.concurrent.duration._
 
-/** Integration test for [[KafkaSink]] against a real Kafka broker, exercising the sink
-  * algebra directly in the test JVM.
+/** Integration test for [[KafkaSink]] and [[KafkaDlqSink]] against a real Kafka broker,
+  * exercising the sink algebras directly in the test JVM through one shared producer.
   */
 class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with CatsEffect {
 
@@ -28,6 +31,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
 
   private val EventsTopic = "valistrio.events.it"
   private val DlqTopic    = "valistrio.dlq.it"
+  private val MaxBytes    = 2097152L
 
   private val network = Network.newNetwork()
   private val kafka    = new KafkaContainer(network)
@@ -36,7 +40,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
 
   override def beforeAll(): Unit = {
     kafka.start()
-    createTopic().unsafeRunSync()
+    createTopics().unsafeRunSync()
   }
 
   override def afterAll(): Unit = {
@@ -44,19 +48,22 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
     network.close()
   }
 
-  private def createTopic(): IO[Unit] =
+  private def createTopics(): IO[Unit] =
     KafkaAdminClient
       .resource[IO](AdminClientSettings(kafka.externalBootstrap))
-      .use(_.createTopic(new NewTopic(EventsTopic, 1, 1.toShort)))
+      .use { admin =>
+        admin.createTopic(new NewTopic(EventsTopic, 1, 1.toShort)) >>
+          admin.createTopic(new NewTopic(DlqTopic, 1, 1.toShort))
+      }
 
-  private def consumeOne: IO[String] = {
+  private def consumeOne(topic: String): IO[String] = {
     val settings = ConsumerSettings[IO, String, String]
       .withBootstrapServers(kafka.externalBootstrap)
-      .withGroupId("valistrio-it-kafka-sink")
+      .withGroupId(s"valistrio-it-kafka-sink-$topic")
       .withAutoOffsetReset(AutoOffsetReset.Earliest)
 
     KafkaConsumer.resource(settings).use { consumer =>
-      consumer.subscribeTo(EventsTopic) >>
+      consumer.subscribeTo(topic) >>
         consumer.stream.take(1).map(_.record.value).compile.lastOrError.timeout(30.seconds)
     }
   }
@@ -66,15 +73,40 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
   private val json  = parser.parse(eventJson).toOption.get
   private val event = ValidatedEvent.of(Event.fromJson(json).toOption.get).toOption.get
 
+  private val failed = FailedEvent.of(
+    json,
+    NonEmptyList.one(ResponseError("schema_validation_failed", recoverable = true, Some("$.page_url"), "must be a string")),
+    Instant.parse("2026-06-13T10:00:00Z"),
+    MaxBytes
+  )
+
   "KafkaSink" should {
     "write a validated event so the original JSON can be read back from the topic" in {
-      KafkaSink.resource(config).use { sink =>
+      KafkaSink.producer(config).use { producer =>
+        val sink = new KafkaSink(producer, EventsTopic)
         for {
           _        <- sink.write(event)
-          consumed <- consumeOne
+          consumed <- consumeOne(EventsTopic)
         } yield consumed
       }.map { consumed =>
         parser.parse(consumed).toOption must beSome(json)
+      }
+    }
+  }
+
+  "KafkaDlqSink" should {
+    "write a FailedEvent so its original and errors can be read back from the DLQ topic" in {
+      KafkaSink.producer(config).use { producer =>
+        val dlq = new KafkaDlqSink(producer, DlqTopic)
+        for {
+          _        <- dlq.write(failed)
+          consumed <- consumeOne(DlqTopic)
+        } yield consumed
+      }.map { consumed =>
+        val record = parser.parse(consumed).toOption.get
+        ((record \\ "original").headOption must beSome(json)) and
+          ((record \\ "type").flatMap(_.asString) must contain("schema_validation_failed")) and
+          ((record \\ "failed_at").flatMap(_.asString) must contain("2026-06-13T10:00:00Z"))
       }
     }
   }
