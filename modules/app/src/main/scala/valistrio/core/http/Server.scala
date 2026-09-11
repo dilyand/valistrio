@@ -1,25 +1,26 @@
 package valistrio.core.http
 
 import cats.effect.IO
+import cats.implicits.toSemigroupKOps
 import com.comcast.ip4s.{Host, Port}
 import org.http4s.{HttpApp, HttpRoutes}
 import org.http4s.ember.server.EmberServerBuilder
-import org.http4s.server.middleware.{
-  AutoSlash,
-  Caching,
-  DefaultHead,
-  EntityLimiter,
-  ErrorAction,
-  ErrorHandling,
-  Logger,
-  ResponseTiming,
-  Timeout
-}
-import org.typelevel.log4cats.slf4j.Slf4jLogger
+import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
+import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
+import valistrio.core.domain.{FailedEvent, ValidatedEvent}
+import valistrio.core.pipeline.{Ingestion, Validation}
+import valistrio.core.post.PostRoutes
+import valistrio.core.resources.{SchemaRegistry, Sink}
+import valistrio.core.validate.ValidateRoutes
 
-class Server(conf: ServerConfig) {
-  implicit val logger: org.typelevel.log4cats.Logger[IO] = Slf4jLogger.getLogger[IO]
+class Server(
+  conf: ServerConfig,
+  schemaRegistry: SchemaRegistry,
+  eventSink: Sink[ValidatedEvent],
+  dlqSink: Sink[FailedEvent],
+  logger: Log4CatsLogger[IO]
+) {
 
   def run: IO[Unit] =
     for {
@@ -29,7 +30,9 @@ class Server(conf: ServerConfig) {
     } yield ()
 
   private def mkApp: HttpApp[IO] = {
-    val routes = Routes.health
+    val validation = new Validation(schemaRegistry)
+    val ingestion  = new Ingestion(validation, eventSink, dlqSink, conf.maxBytes)
+    val routes     = HealthRoutes.routes <+> ValidateRoutes.routes(validation) <+> PostRoutes.routes(ingestion)
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
@@ -48,7 +51,7 @@ class Server(conf: ServerConfig) {
       HttpApp[IO] { req =>
         app(req).flatMap { resp =>
           val p             = req.uri.path.renderString
-          val shouldDisable = p == "/health"
+          val shouldDisable = p == "/health" || p == "/validate" || p == "/post"
 
           if (shouldDisable) Caching.`no-store-response`[IO](resp)
           else IO.pure(resp)
