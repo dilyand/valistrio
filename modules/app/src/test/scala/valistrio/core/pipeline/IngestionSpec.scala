@@ -1,4 +1,4 @@
-package valistrio.core.post
+package valistrio.core.pipeline
 
 import cats.data.NonEmptyList
 import cats.effect.{IO, Ref}
@@ -13,9 +13,8 @@ import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.domain.{FailedEvent, SchemaRef, ValidatedEvent, Writable}
 import valistrio.core.resources.{SchemaRegistry, Sink}
-import valistrio.core.validate.ValidateService
 
-class PostServiceSpec extends Specification {
+class IngestionSpec extends Specification {
 
   // ---- Stubs ----
 
@@ -30,8 +29,8 @@ class PostServiceSpec extends Specification {
 
   /** Records every write; raises `result` when it is a Left (a raised SinkError). */
   private class RecordingSink[A <: Writable](ref: Ref[IO, Vector[A]], result: Either[SinkError, Unit]) extends Sink[A] {
-    def write(a: A): IO[Unit]  = ref.update(_ :+ a) >> IO.fromEither(result)
-    def written: Vector[A]     = ref.get.unsafeRunSync()
+    def write(a: A): IO[Unit] = ref.update(_ :+ a) >> IO.fromEither(result)
+    def written: Vector[A]    = ref.get.unsafeRunSync()
   }
 
   private def sink[A <: Writable](result: Either[SinkError, Unit] = Right(())): RecordingSink[A] =
@@ -58,7 +57,7 @@ class PostServiceSpec extends Specification {
   // ---- Helpers ----
 
   private def run(registry: SchemaRegistry, eventSink: Sink[ValidatedEvent], dlqSink: Sink[FailedEvent], body: String): PostResponse =
-    new PostService(new ValidateService(registry), eventSink, dlqSink, MaxBytes).post(body).unsafeRunSync()
+    new Ingestion(new Validation(registry), eventSink, dlqSink, MaxBytes).ingest(body).unsafeRunSync()
 
   private def errorTypes(resp: PostResponse): List[String] = resp match {
     case PostResponse.Written        => Nil
@@ -68,7 +67,7 @@ class PostServiceSpec extends Specification {
 
   // ---- Tests ----
 
-  "PostService" should {
+  "Ingestion" should {
 
     "return Written and write to the events sink when validation succeeds" in {
       val es = sink[ValidatedEvent]()

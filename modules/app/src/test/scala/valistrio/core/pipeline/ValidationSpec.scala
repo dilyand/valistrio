@@ -1,21 +1,22 @@
-package valistrio.core.validate
+package valistrio.core.pipeline
 
 import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import io.circe.Json
+import cats.syntax.applicativeError._
+import io.circe.{Json, parser}
 import org.specs2.mutable.Specification
-import valistrio.core.ValistrioError.ValidateError
+import valistrio.core.ValistrioError.{ValidateError, ValidationErrors}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
-import valistrio.core.domain.SchemaRef
+import valistrio.core.domain.{ResponseError, SchemaRef, ValidatedEvent}
 import valistrio.core.resources.SchemaRegistry
 
-class ValidateServiceSpec extends Specification {
+class ValidationSpec extends Specification {
 
   // ---- Stub ----
 
-  /** In-memory SchemaRegistry: returns `responses(name.toString)` if present, else `default`.
+  /** In-memory SchemaRegistry: returns `responses(ref.toString)` if present, else `default`.
     * Structure is not really validated here (see the integration suite) — the event-schema
     * subject just returns `default`, so fixtures must be well-formed for extraction to succeed.
     */
@@ -47,8 +48,8 @@ class ValidateServiceSpec extends Specification {
     val ctxPart = contexts.map(c => s""","contexts":$c""").getOrElse("")
     s"""{"meta":$validMeta,"body":$body$ctxPart}"""
   }
-  private def eventJson(data: String) =
-    s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":$data}"""
+  private def eventJson(data: String): Json =
+    parser.parse(s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":$data}""").toOption.get
 
   private val validEvent            = eventJson(eventData())
   private val validEventWithContext = eventJson(eventData(contexts = Some(s"[$validContext]")))
@@ -59,68 +60,63 @@ class ValidateServiceSpec extends Specification {
 
   // ---- Helpers ----
 
-  private def run(service: ValidateService, body: String) =
-    service.validate(body).unsafeRunSync()
+  private def validate(registry: SchemaRegistry, json: Json): Either[ValidationErrors, ValidatedEvent] =
+    new Validation(registry).validate(json).attemptNarrow[ValidationErrors].unsafeRunSync()
 
-  private def errorTypes(resp: ValidateResponse): List[String] = resp match {
-    case ValidateResponse.Failure(errors) => errors.toList.map(_.`type`)
-    case ValidateResponse.Success         => Nil
-  }
+  private def errorTypes(registry: SchemaRegistry, json: Json): List[String] =
+    validate(registry, json) match {
+      case Right(_)                     => Nil
+      case Left(ValidationErrors(errs)) => errs.flatMap(ResponseError.from).toList.map(_.`type`)
+    }
 
   // ---- Tests ----
 
-  "ValidateService" should {
+  "Validation" should {
 
     // -- Happy path --
 
-    "return Success for a valid event without contexts" in {
-      run(new ValidateService(stubOk), validEvent) must beEqualTo(ValidateResponse.Success)
+    "yield a ValidatedEvent for a valid event without contexts" in {
+      validate(stubOk, validEvent) must beRight
     }
 
-    "return Success for a valid event with one context" in {
-      run(new ValidateService(stubOk), validEventWithContext) must beEqualTo(ValidateResponse.Success)
+    "yield a ValidatedEvent for a valid event with one context" in {
+      validate(stubOk, validEventWithContext) must beRight
     }
 
-    "return Success for a valid event with multiple contexts" in {
-      run(new ValidateService(stubOk), validEventTwoContexts) must beEqualTo(ValidateResponse.Success)
-    }
-
-    // -- Parse failure (short-circuit) --
-
-    "return Failure(malformed_json) when the body is not valid JSON" in {
-      errorTypes(run(new ValidateService(stubOk), "not json at all")) must beEqualTo(List("malformed_json"))
+    "yield a ValidatedEvent for a valid event with multiple contexts" in {
+      validate(stubOk, validEventTwoContexts) must beRight
     }
 
     // -- Registry errors --
 
-    "return Failure(schema_not_found) when the body schema is not in the registry" in {
-      val svc = new ValidateService(stubFor(bodySubject, Left(SchemaNotFound(SchemaRef.parse(bodySubject).toOption.get))))
-      errorTypes(run(svc, validEvent)) must contain("schema_not_found")
+    "raise schema_not_found when the body schema is not in the registry" in {
+      val stub = stubFor(bodySubject, Left(SchemaNotFound(SchemaRef.parse(bodySubject).toOption.get)))
+      errorTypes(stub, validEvent) must contain("schema_not_found")
     }
 
-    "return Failure(schema_registry_timeout) when the registry times out" in {
-      errorTypes(run(new ValidateService(stubDefault(Left(SchemaRegistryTimeout))), validEvent)) must contain("schema_registry_timeout")
+    "raise schema_registry_timeout when the registry times out" in {
+      errorTypes(stubDefault(Left(SchemaRegistryTimeout)), validEvent) must contain("schema_registry_timeout")
     }
 
-    "return Failure(schema_registry_unavailable) when the registry is unreachable" in {
-      errorTypes(run(new ValidateService(stubDefault(Left(SchemaRegistryUnavailable("connection refused")))), validEvent)) must contain("schema_registry_unavailable")
+    "raise schema_registry_unavailable when the registry is unreachable" in {
+      errorTypes(stubDefault(Left(SchemaRegistryUnavailable("connection refused"))), validEvent) must contain("schema_registry_unavailable")
     }
 
     // -- Validation failures --
 
-    "return Failure(schema_validation_failed) when the body fails schema validation" in {
+    "raise schema_validation_failed when the body fails schema validation" in {
       val err = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string")))
-      errorTypes(run(new ValidateService(stubFor(bodySubject, Left(err))), validEvent)) must beEqualTo(List("schema_validation_failed"))
+      errorTypes(stubFor(bodySubject, Left(err)), validEvent) must beEqualTo(List("schema_validation_failed"))
     }
 
     "expand ValidationFailed into one entry per field violation" in {
       val err = ValidationFailed(NonEmptyList.of(ValidationError("$.a", "A"), ValidationError("$.b", "B")))
-      errorTypes(run(new ValidateService(stubFor(bodySubject, Left(err))), validEvent)) must beEqualTo(List("schema_validation_failed", "schema_validation_failed"))
+      errorTypes(stubFor(bodySubject, Left(err)), validEvent) must beEqualTo(List("schema_validation_failed", "schema_validation_failed"))
     }
 
-    "return a context validation error" in {
+    "surface a context validation error" in {
       val err = ValidationFailed(NonEmptyList.one(ValidationError("$.user_id", "required")))
-      errorTypes(run(new ValidateService(stubFor(contextSubject, Left(err))), validEventWithContext)) must contain("schema_validation_failed")
+      errorTypes(stubFor(contextSubject, Left(err)), validEventWithContext) must contain("schema_validation_failed")
     }
 
     // -- Error collection across payloads (no short-circuit) --
@@ -130,14 +126,25 @@ class ValidateServiceSpec extends Specification {
         bodySubject    -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "bad")))),
         contextSubject -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.user_id", "required"))))
       ))
-      errorTypes(run(new ValidateService(stub), validEventWithContext)).count(_ == "schema_validation_failed") must beEqualTo(2)
+      errorTypes(stub, validEventWithContext).count(_ == "schema_validation_failed") must beEqualTo(2)
     }
 
     // -- Structural gate short-circuits payload validation --
 
     "short-circuit on an event-schema failure without validating payloads" in {
-      val stub = stubFor(ValidateService.EventSchemaRef.toString, Left(SchemaRegistryTimeout))
-      errorTypes(run(new ValidateService(stub), validEvent)) must beEqualTo(List("schema_registry_timeout"))
+      val stub = stubFor(Validation.EventSchemaRef.toString, Left(SchemaRegistryTimeout))
+      errorTypes(stub, validEvent) must beEqualTo(List("schema_registry_timeout"))
+    }
+  }
+
+  "Validation.parse" should {
+
+    "return the JSON for a well-formed body" in {
+      Validation.parse(validBody) must beRight
+    }
+
+    "return MalformedJson for a non-JSON body" in {
+      Validation.parse("not json at all") must beLeft.like { case MalformedJson(_) => ok }
     }
   }
 }
