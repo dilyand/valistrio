@@ -86,7 +86,7 @@ class PostIntegrationSpec
     schemaRegistry.start()
 
     implicit val logger = Slf4jLogger.getLogger[IO]
-    val config = SchemaRegistryConfig(schemaRegistry.url, timeoutMs = 15000)
+    val config = SchemaRegistryConfig(schemaRegistry.url, timeoutMs = 15000, cacheCapacity = 2000)
     ConfluentSchemaRegistry.resource(config).use { reg =>
       for {
         _ <- reg.register(pageViewSchemaName, pageViewSchemaJson)

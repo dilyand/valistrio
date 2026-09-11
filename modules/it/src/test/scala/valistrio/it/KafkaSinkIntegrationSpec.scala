@@ -26,12 +26,13 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
   override val Timeout: scala.concurrent.duration.Duration =
     scala.concurrent.duration.Duration(120, "s")
 
-  private val Topic = "valistrio.events.it"
+  private val EventsTopic = "valistrio.events.it"
+  private val DlqTopic    = "valistrio.dlq.it"
 
   private val network = Network.newNetwork()
   private val kafka    = new KafkaContainer(network)
 
-  private def config = KafkaConfig(kafka.externalBootstrap, KafkaTopics(Topic, "valistrio.dlq.it"))
+  private def config = KafkaConfig(kafka.externalBootstrap, KafkaTopics(EventsTopic, DlqTopic))
 
   override def beforeAll(): Unit = {
     kafka.start()
@@ -46,7 +47,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
   private def createTopic(): IO[Unit] =
     KafkaAdminClient
       .resource[IO](AdminClientSettings(kafka.externalBootstrap))
-      .use(_.createTopic(new NewTopic(Topic, 1, 1.toShort)))
+      .use(_.createTopic(new NewTopic(EventsTopic, 1, 1.toShort)))
 
   private def consumeOne: IO[String] = {
     val settings = ConsumerSettings[IO, String, String]
@@ -55,7 +56,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
       .withAutoOffsetReset(AutoOffsetReset.Earliest)
 
     KafkaConsumer.resource(settings).use { consumer =>
-      consumer.subscribeTo(Topic) >>
+      consumer.subscribeTo(EventsTopic) >>
         consumer.stream.take(1).map(_.record.value).compile.lastOrError.timeout(30.seconds)
     }
   }

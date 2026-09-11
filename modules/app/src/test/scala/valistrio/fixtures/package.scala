@@ -17,7 +17,7 @@ package object fixtures {
   }
 
   final object TestCase {
-    private val defaultSchemaRegistry = SchemaRegistryConfig("http://localhost:8081", 3000)
+    private val defaultSchemaRegistry = SchemaRegistryConfig("http://localhost:8081", 3000, 2000)
     private val defaultKafka           = KafkaConfig("localhost:9092", KafkaTopics("valistrio.events", "valistrio.dlq"))
 
     final object ReferenceConf extends TestCase[String, Config] {
@@ -80,7 +80,7 @@ package object fixtures {
 
       val expected = Config(
         ServerConfig("0.0.0.0", 8080, 2097152L, 5.seconds),
-        SchemaRegistryConfig("http://registry.internal:8081", 3000),
+        SchemaRegistryConfig("http://registry.internal:8081", 3000, 2000),
         defaultKafka
       )
     }

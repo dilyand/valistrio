@@ -37,7 +37,7 @@ object Config {
     implicit val serverConfigDecoder: Decoder[ServerConfig] = deriveDecoder[ServerConfig]
   }
 
-  final case class SchemaRegistryConfig(url: String, timeoutMs: Int, cacheCapacity: Int = 2000)
+  final case class SchemaRegistryConfig(url: String, timeoutMs: Int, cacheCapacity: Int)
   object SchemaRegistryConfig {
     implicit val schemaRegistryConfigDecoder: Decoder[SchemaRegistryConfig] = deriveDecoder[SchemaRegistryConfig]
   }
