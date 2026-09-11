@@ -9,7 +9,7 @@ import org.apache.kafka.clients.admin.NewTopic
 import org.specs2.mutable.Specification
 import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
-import valistrio.core.Config.KafkaConfig
+import valistrio.core.Config.{KafkaConfig, KafkaTopics}
 import valistrio.core.domain.{Event, ValidatedEvent}
 import valistrio.core.post.KafkaSink
 import valistrio.it.containers.KafkaContainer
@@ -31,7 +31,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
   private val network = Network.newNetwork()
   private val kafka    = new KafkaContainer(network)
 
-  private def config = KafkaConfig(kafka.externalBootstrap, Topic)
+  private def config = KafkaConfig(kafka.externalBootstrap, KafkaTopics(Topic, "valistrio.dlq.it"))
 
   override def beforeAll(): Unit = {
     kafka.start()

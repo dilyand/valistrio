@@ -4,7 +4,7 @@ import org.specs2.matcher.MatchResult
 import org.specs2.matcher.MustThrownMatchers.ok
 import valistrio.TestUtils._
 import valistrio.core.Config
-import valistrio.core.Config.{KafkaConfig, SchemaRegistryConfig, ServerConfig}
+import valistrio.core.Config.{KafkaConfig, KafkaTopics, SchemaRegistryConfig, ServerConfig}
 import valistrio.core.ValistrioError.ConfigError
 import valistrio.core.ValistrioError.ConfigError.{NotBase64, TypesafeConfigError}
 
@@ -18,7 +18,7 @@ package object fixtures {
 
   final object TestCase {
     private val defaultSchemaRegistry = SchemaRegistryConfig("http://localhost:8081", 3000)
-    private val defaultKafka           = KafkaConfig("localhost:9092", "valistrio.events")
+    private val defaultKafka           = KafkaConfig("localhost:9092", KafkaTopics("valistrio.events", "valistrio.dlq"))
 
     final object ReferenceConf extends TestCase[String, Config] {
       val in: String = fromFile("config/reference.conf")

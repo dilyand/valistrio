@@ -37,12 +37,17 @@ object Config {
     implicit val serverConfigDecoder: Decoder[ServerConfig] = deriveDecoder[ServerConfig]
   }
 
-  final case class SchemaRegistryConfig(url: String, timeoutMs: Int)
+  final case class SchemaRegistryConfig(url: String, timeoutMs: Int, cacheCapacity: Int = 2000)
   object SchemaRegistryConfig {
     implicit val schemaRegistryConfigDecoder: Decoder[SchemaRegistryConfig] = deriveDecoder[SchemaRegistryConfig]
   }
 
-  final case class KafkaConfig(bootstrapServers: String, topic: String)
+  final case class KafkaTopics(events: String, dlq: String)
+  object KafkaTopics {
+    implicit val kafkaTopicsDecoder: Decoder[KafkaTopics] = deriveDecoder[KafkaTopics]
+  }
+
+  final case class KafkaConfig(bootstrapServers: String, topics: KafkaTopics)
   object KafkaConfig {
     implicit val kafkaConfigDecoder: Decoder[KafkaConfig] = deriveDecoder[KafkaConfig]
   }

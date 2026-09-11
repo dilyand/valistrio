@@ -52,8 +52,7 @@ final class ConfluentSchemaRegistry private (client: SchemaRegistryClient, timeo
 
 object ConfluentSchemaRegistry {
 
-  private val SchemaRegistryCacheCapacity = 2000
-  private val mapper                      = new ObjectMapper
+  private val mapper            = new ObjectMapper
   private val jsonSchemaFactory           = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7)
 
   /** On acquisition, seeds all Valistrio-owned schemas and fails (preventing startup) if the
@@ -69,7 +68,7 @@ object ConfluentSchemaRegistry {
       val restService = new RestService(config.url)
       restService.setHttpConnectTimeoutMs(config.timeoutMs)
       restService.setHttpReadTimeoutMs(config.timeoutMs)
-      new CachedSchemaRegistryClient(restService, SchemaRegistryCacheCapacity)
+      new CachedSchemaRegistryClient(restService, config.cacheCapacity)
     }).evalMap { client =>
       val registry = new ConfluentSchemaRegistry(client, config.timeoutMs.millis)
       seedOwnedSchemas(registry).as(registry: SchemaRegistry)

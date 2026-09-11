@@ -19,13 +19,13 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 /** A [[Sink]] backed by an `fs2-kafka` producer, writing the event's original JSON to
-  * `config.topic` keyed by its event id. A write failure is raised as a
+  * `config.topics.events` keyed by its event id. A write failure is raised as a
   * [[valistrio.core.ValistrioError.SinkError]] on the IO error channel.
   */
 final class KafkaSink private (producer: KafkaProducer[IO, String, String], config: KafkaConfig) extends Sink {
 
   def write(event: ValidatedEvent): IO[Unit] = {
-    val record = ProducerRecord(config.topic, event.eventId, event.json.noSpaces)
+    val record = ProducerRecord(config.topics.events, event.eventId, event.json.noSpaces)
     producer.produceOne_(record).flatten.void.adaptError {
       case _: KafkaTimeoutException            => Timeout
       case e: UnknownTopicOrPartitionException => Unavailable(s"unknown topic or partition: ${e.getMessage}")
@@ -42,7 +42,7 @@ object KafkaSink {
 
   /** Creates a [[KafkaSink]]. On acquisition, probes broker connectivity so the app fails fast
     * at startup if Kafka is unreachable rather than only on the first `/post`. The probe checks
-    * cluster reachability only (not that `config.topic` exists) — topics are commonly provisioned
+    * cluster reachability only (not that `config.topics.events` exists) — topics are commonly provisioned
     * out-of-band, and brokers often disable auto-topic-creation.
     */
   def resource(config: KafkaConfig): Resource[IO, Sink] =
