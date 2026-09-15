@@ -1,4 +1,4 @@
-package valistrio.core.validate
+package valistrio.core
 
 import cats.data.NonEmptyList
 import org.specs2.mutable.Specification
@@ -11,7 +11,6 @@ class ValidateErrorSpec extends Specification {
     "MalformedJson msg includes the cause" in {
       MalformedJson("unexpected token at position 5").msg must contain("unexpected token at position 5")
     }
-
 
     "SchemaNotFound msg includes the schema name" in {
       val name = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))

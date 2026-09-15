@@ -14,9 +14,7 @@ import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.ValistrioError.SinkError._
 import valistrio.core.domain.{FailedEvent, SchemaRef, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
-import valistrio.core.post.PostRoutes
 import valistrio.core.resources.{SchemaRegistry, Sink}
-import valistrio.core.validate.ValidateRoutes
 
 class RoutesSpec extends Specification {
 
@@ -50,7 +48,7 @@ class RoutesSpec extends Specification {
   // ---- Helpers ----
 
   private def app(registry: SchemaRegistry = new StubSchemaRegistry()): HttpApp[IO] =
-    ValidateRoutes.routes(new Validation(registry)).orNotFound
+    Routes.validate(new Validation(registry)).orNotFound
 
   private def post(body: String, registry: SchemaRegistry = new StubSchemaRegistry()): Response[IO] = {
     val req = Request[IO](method = Method.POST, uri = uri"/validate").withEntity(body)
@@ -63,7 +61,7 @@ class RoutesSpec extends Specification {
   private val MaxBytes = 2097152L
 
   private def postApp(registry: SchemaRegistry, sink: Sink[ValidatedEvent], dlqSink: Sink[FailedEvent]): HttpApp[IO] =
-    PostRoutes.routes(new Ingestion(new Validation(registry), sink, dlqSink, MaxBytes)).orNotFound
+    Routes.post(new Ingestion(new Validation(registry), sink, dlqSink, MaxBytes)).orNotFound
 
   private def postEnvelope(
     body: String,

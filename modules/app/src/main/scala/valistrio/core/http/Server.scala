@@ -10,9 +10,7 @@ import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
 import valistrio.core.domain.{FailedEvent, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
-import valistrio.core.post.PostRoutes
 import valistrio.core.resources.{SchemaRegistry, Sink}
-import valistrio.core.validate.ValidateRoutes
 
 class Server(
   conf: ServerConfig,
@@ -32,7 +30,7 @@ class Server(
   private def mkApp: HttpApp[IO] = {
     val validation = new Validation(schemaRegistry)
     val ingestion  = new Ingestion(validation, eventSink, dlqSink, conf.maxBytes)
-    val routes     = HealthRoutes.routes <+> ValidateRoutes.routes(validation) <+> PostRoutes.routes(ingestion)
+    val routes     = Routes.health <+> Routes.validate(validation) <+> Routes.post(ingestion)
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)

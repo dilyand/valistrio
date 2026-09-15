@@ -1,12 +1,10 @@
-package valistrio.core.validate
+package valistrio.core.domain
 
 import cats.data.NonEmptyList
 import io.circe.syntax._
 import org.specs2.mutable.Specification
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{SchemaRef, SchemaVersion}
-import valistrio.core.domain.ResponseError
 
 class ValidateResponseSpec extends Specification {
 

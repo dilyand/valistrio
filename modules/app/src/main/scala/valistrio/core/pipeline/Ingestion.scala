@@ -5,24 +5,8 @@ import cats.effect.IO
 import cats.syntax.applicativeError._
 import io.circe.Json
 import valistrio.core.ValistrioError.{SinkError, ValidationErrors}
-import valistrio.core.domain.{Disposition, FailedEvent, ResponseError, ValidatedEvent}
+import valistrio.core.domain.{Disposition, FailedEvent, PostResponse, ResponseError, ValidatedEvent}
 import valistrio.core.resources.Sink
-
-/** The outcome of the /post pipeline. `/post` returns 200 exactly when Valistrio owns the event:
-  *
-  *  - [[Written]]: valid, written to the events topic.
-  *  - [[Dlqd]]: failed validation but salvaged to the DLQ (still owned).
-  *  - [[Failed]]: a transient infrastructure failure — the event could not be owned (5xx).
-  *
-  * The HTTP dress — the wire encoding and the status mapping — lives with the /post route.
-  */
-sealed trait PostResponse
-
-object PostResponse {
-  case object Written extends PostResponse
-  final case class Dlqd(errors: NonEmptyList[ResponseError]) extends PostResponse
-  final case class Failed(errors: NonEmptyList[ResponseError]) extends PostResponse
-}
 
 /** Orchestrates the /post flow: parse, validate (reusing [[Validation]]), then either write the
   * [[ValidatedEvent]] to the events [[Sink]] or, when the event failed validation in a way
@@ -48,7 +32,7 @@ class Ingestion(
         // Malformed JSON is owned: salvage the raw body (as a JSON string) to the DLQ.
         toDlq(Json.fromString(rawBody), ResponseError.from(err))
       case Right(json) =>
-        validation.validate(json).attemptNarrow[ValidationErrors].flatMap {
+        validation.validateEvent(json).attemptNarrow[ValidationErrors].flatMap {
           case Left(ValidationErrors(errors)) =>
             if (errors.exists(Disposition.of(_) == Disposition.Retry))
               IO.pure(PostResponse.Failed(errors.flatMap(ResponseError.from)))
