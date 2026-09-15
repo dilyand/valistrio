@@ -1,6 +1,9 @@
 import com.typesafe.sbt.packager.docker.DockerPlugin.autoImport._
 import sbtbuildinfo.BuildInfoKey
 
+// Tags are plain SemVer (`X.Y.Z`), no `v` prefix.
+ThisBuild / dynverVTagPrefix := false
+
 lazy val versions = new {
   val catsCore    = "2.13.0"
   val catsEffect  = "3.5.7"
@@ -14,7 +17,6 @@ lazy val versions = new {
   val logging     = "2.7.1"
   val slf4j       = "2.0.18"
 
-  // Java
   // Confluent versions newer than these pin a non-existent jetty-bom version
   // (9.4.59 / 9.4.61, missing the .vYYYYMMDD qualifier) in their parent POM,
   // which breaks dependency resolution entirely. Pinned to the last versions
@@ -47,7 +49,6 @@ lazy val deps = new {
   val logging           = "org.typelevel"         %% "log4cats-slf4j"      % versions.logging
   val slf4j             = "org.slf4j"              % "slf4j-simple"        % versions.slf4j
 
-  // Java
   val schemaRegistry       = "io.confluent"  % "kafka-schema-registry-client" % versions.schemaRegistry
   val jsonSchemaSerializer = "io.confluent"  % "kafka-json-schema-serializer" % versions.jsonSchemaSerializer
   val jsonSchemaValidator  = "com.networknt" % "json-schema-validator"        % versions.jsonSchemaValidator

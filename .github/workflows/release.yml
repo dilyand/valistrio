@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
 
 permissions:
   contents: write   # create the GitHub Release
@@ -34,21 +34,23 @@ jobs:
           VALISTRIO_RELEASE: "true"
         run: sbt app/Docker/publish   # pushes ghcr.io/dilyand/valistrio:<version> and :latest
 
+      # Pre-release tags (e.g. 0.1.0-alpha.1) still build and push a version-stamped
+      # image above, but only prod-ready versions get a GitHub Release.
       - name: Extract changelog section
+        if: ${{ !contains(github.ref_name, '-') }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          awk -v v="$VERSION" '
+          awk -v v="$GITHUB_REF_NAME" '
             $0 ~ "^## \\[" v "\\]" {p=1; next}
             /^## \[/ {if (p) exit}
             p {print}
           ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::CHANGELOG.md has no '## [$GITHUB_REF_NAME]' section"
+            exit 1
+          fi
 
       - name: Create GitHub Release
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ -s release-notes.md ]; then
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
-          else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
-          fi
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
