@@ -70,7 +70,7 @@ class Server(
         )
     }
 
-    val addCors: HttpApp[IO] => HttpApp[IO] = identity // TODO
+    val addCors: HttpApp[IO] => HttpApp[IO] = identity // TODO(#20): configurable CORS middleware
 
     // make configurable
     val addLogging: HttpApp[IO] => HttpApp[IO] =
