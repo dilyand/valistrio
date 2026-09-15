@@ -17,8 +17,11 @@ trait SchemaRegistry {
     */
   def validate(ref: SchemaRef, data: Json): IO[Unit]
 
-  /** Register `schemaJson` under `ref` as the Confluent subject. Idempotent; used at startup
-    * to seed Valistrio-owned schemas. Raises on failure — a seed failure is fatal at startup.
+  /** Register `schemaJson` under `ref` (the Confluent subject), used at startup to seed
+    * Valistrio-owned schemas. Idempotency and evolution are the registry's: re-registering an
+    * identical schema is a no-op returning the existing version, while a changed schema under the
+    * same subject is accepted or rejected by Confluent's compatibility rules — seeding does not
+    * hard-block re-registration. Raises on failure; a seed failure is fatal at startup.
     */
   def register(ref: SchemaRef, schemaJson: String): IO[Unit]
 }
