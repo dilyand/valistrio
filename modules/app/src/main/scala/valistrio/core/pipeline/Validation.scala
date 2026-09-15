@@ -7,7 +7,8 @@ import cats.syntax.parallel._
 import io.circe.{Json, parser}
 import valistrio.core.ValistrioError.{ValidateError, ValidationErrors}
 import valistrio.core.ValistrioError.ValidateError._
-import valistrio.core.domain.{Event, ResponseError, SchemaRef, SchemaVersion, TypedData, ValidateResponse, ValidatedEvent}
+import valistrio.core.domain.{Event, ResponseError, SchemaRef, SchemaVersion, TypedData, ValidateResponse}
+import valistrio.core.domain.Writable.ValidatedEvent
 import valistrio.core.resources.SchemaRegistry
 
 /** The validation pipeline, shared by the /validate and /post routes. The event schema is the sole

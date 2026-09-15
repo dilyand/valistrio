@@ -11,7 +11,8 @@ import valistrio.core.ValistrioError.SinkError._
 import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
-import valistrio.core.domain.{FailedEvent, PostResponse, SchemaRef, ValidatedEvent, Writable}
+import valistrio.core.domain.{PostResponse, SchemaRef, Writable}
+import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.resources.{SchemaRegistry, Sink}
 
 class IngestionSpec extends Specification {

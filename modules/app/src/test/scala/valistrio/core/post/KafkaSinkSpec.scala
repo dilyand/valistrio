@@ -2,7 +2,8 @@ package valistrio.core.post
 
 import io.circe.parser
 import org.specs2.mutable.Specification
-import valistrio.core.domain.{Event, ValidatedEvent}
+import valistrio.core.domain.Event
+import valistrio.core.domain.Writable.ValidatedEvent
 
 /** Unit tests for the pure part of the write path (what lands on the topic). The live
   * producer needs a broker, so it is covered by the IT suite.

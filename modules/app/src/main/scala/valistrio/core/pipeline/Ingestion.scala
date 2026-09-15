@@ -5,7 +5,8 @@ import cats.effect.IO
 import cats.syntax.applicativeError._
 import io.circe.Json
 import valistrio.core.ValistrioError.{SinkError, ValidationErrors}
-import valistrio.core.domain.{Disposition, FailedEvent, PostResponse, ResponseError, ValidatedEvent}
+import valistrio.core.domain.{Disposition, PostResponse, ResponseError}
+import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.resources.Sink
 
 /** Orchestrates the /post flow: parse, validate (reusing [[Validation]]), then either write the

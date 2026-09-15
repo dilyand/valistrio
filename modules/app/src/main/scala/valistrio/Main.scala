@@ -3,7 +3,7 @@ package valistrio
 import cats.effect.{ExitCode, IO, IOApp, Resource}
 import cats.syntax.apply._
 import valistrio.core.Config
-import valistrio.core.domain.{FailedEvent, ValidatedEvent}
+import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.http.Server
 import valistrio.core.resources.{ConfluentSchemaRegistry, Kafka, KafkaSink, Logging}
 

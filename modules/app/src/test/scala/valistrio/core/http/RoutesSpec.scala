@@ -12,7 +12,8 @@ import valistrio.core.ValistrioError.{SinkError, ValidateError}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.ValistrioError.SinkError._
-import valistrio.core.domain.{FailedEvent, SchemaRef, ValidatedEvent}
+import valistrio.core.domain.SchemaRef
+import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
 import valistrio.core.resources.{SchemaRegistry, Sink}
 

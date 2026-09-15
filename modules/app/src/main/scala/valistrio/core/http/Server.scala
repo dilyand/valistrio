@@ -8,7 +8,7 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
 import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
-import valistrio.core.domain.{FailedEvent, ValidatedEvent}
+import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
 import valistrio.core.resources.{SchemaRegistry, Sink}
 
