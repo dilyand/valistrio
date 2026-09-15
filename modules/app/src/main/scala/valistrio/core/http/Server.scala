@@ -10,7 +10,8 @@ import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
-import valistrio.core.resources.{SchemaRegistry, Sink}
+import valistrio.core.resources.schemas.SchemaRegistry
+import valistrio.core.resources.sinks.Sink
 
 class Server(
   conf: ServerConfig,

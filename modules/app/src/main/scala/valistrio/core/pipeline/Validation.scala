@@ -9,7 +9,7 @@ import valistrio.core.ValistrioError.{ValidateError, ValidationErrors}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.domain.{Event, ResponseError, SchemaRef, SchemaVersion, TypedData, ValidateResponse}
 import valistrio.core.domain.Writable.ValidatedEvent
-import valistrio.core.resources.SchemaRegistry
+import valistrio.core.resources.schemas.SchemaRegistry
 
 /** The validation pipeline, shared by the /validate and /post routes. The event schema is the sole
   * structural authority; validation is a multi-pass parse:

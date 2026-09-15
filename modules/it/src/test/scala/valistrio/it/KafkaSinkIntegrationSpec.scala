@@ -13,7 +13,7 @@ import org.testcontainers.containers.Network
 import valistrio.core.Config.{KafkaConfig, KafkaTopics}
 import valistrio.core.domain.{Event, ResponseError}
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
-import valistrio.core.resources.{Kafka, KafkaSink}
+import valistrio.core.resources.sinks.{Kafka, KafkaSink}
 import valistrio.it.containers.KafkaContainer
 
 import java.time.Instant

@@ -1,4 +1,4 @@
-package valistrio.core.resources
+package valistrio.core.resources.sinks
 
 import cats.effect.{IO, Resource}
 import fs2.kafka._

@@ -1,4 +1,4 @@
-package valistrio.core.resources
+package valistrio.core.resources.schemas
 
 import cats.effect.unsafe.implicits.global
 import io.circe.parser

@@ -9,7 +9,7 @@ import valistrio.core.ValistrioError.ValidateError
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.ValistrioError.ValidationError
 import valistrio.core.domain.{SchemaRef, ValidateResponse}
-import valistrio.core.resources.SchemaRegistry
+import valistrio.core.resources.schemas.SchemaRegistry
 
 class ValidationSpec extends Specification {
 

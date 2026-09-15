@@ -1,4 +1,4 @@
-package valistrio.core.post
+package valistrio.core.resources.sinks
 
 import io.circe.parser
 import org.specs2.mutable.Specification

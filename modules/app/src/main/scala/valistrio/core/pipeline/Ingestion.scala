@@ -7,7 +7,7 @@ import io.circe.Json
 import valistrio.core.ValistrioError.{SinkError, ValidationErrors}
 import valistrio.core.domain.{Disposition, PostResponse, ResponseError}
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
-import valistrio.core.resources.Sink
+import valistrio.core.resources.sinks.Sink
 
 /** Orchestrates the /post flow: parse, validate (reusing [[Validation]]), then either write the
   * [[ValidatedEvent]] to the events [[Sink]] or, when the event failed validation in a way

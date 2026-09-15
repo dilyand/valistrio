@@ -5,7 +5,9 @@ import cats.syntax.apply._
 import valistrio.core.Config
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.http.Server
-import valistrio.core.resources.{ConfluentSchemaRegistry, Kafka, KafkaSink, Logging}
+import valistrio.core.resources.Logging
+import valistrio.core.resources.schemas.ConfluentSchemaRegistry
+import valistrio.core.resources.sinks.{Kafka, KafkaSink}
 
 object Main extends IOApp {
 

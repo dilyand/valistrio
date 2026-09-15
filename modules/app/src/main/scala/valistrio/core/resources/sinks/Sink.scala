@@ -1,4 +1,4 @@
-package valistrio.core.resources
+package valistrio.core.resources.sinks
 
 import cats.effect.IO
 import valistrio.core.domain.Writable
