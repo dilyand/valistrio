@@ -84,5 +84,28 @@ object ValistrioError {
       val msg = s"Sink write failed. $cause"
     }
   }
+
+  /** A schema-registration failure. Raised on the IO error channel so a caller can recover it
+    * (startup seeding lets it propagate as a fatal seed; a future schemas route would map it to a
+    * response) rather than an unclassified exception crashing the process.
+    */
+  sealed trait RegisterError extends ValistrioError
+  final object RegisterError {
+    final case class IncompatibleSchema(ref: SchemaRef, cause: String) extends RegisterError {
+      val msg = s"Schema $ref is incompatible with the registered version. $cause"
+    }
+
+    final case class InvalidSchema(ref: SchemaRef, cause: String) extends RegisterError {
+      val msg = s"Schema $ref is invalid. $cause"
+    }
+
+    final case class RegistryUnavailable(cause: String) extends RegisterError {
+      val msg = s"Schema registry unavailable. $cause"
+    }
+
+    case object RegistryTimeout extends RegisterError {
+      val msg = "Schema registry request timed out."
+    }
+  }
 }
 

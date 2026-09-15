@@ -2,7 +2,7 @@ package valistrio.core
 
 import cats.data.NonEmptyList
 import org.specs2.mutable.Specification
-import valistrio.core.ValistrioError.{ValidateError, ValidationError, ValidationErrors}
+import valistrio.core.ValistrioError.{RegisterError, ValidateError, ValidationError, ValidationErrors}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
@@ -59,6 +59,28 @@ class ValidateErrorSpec extends Specification {
       ))
       agg.msg must contain("$.page_url: must be a string")
       agg.msg must contain("com.myorg/user/1.0.0")
+    }
+  }
+
+  "RegisterError" should {
+    val ref = SchemaRef("com.myorg", "page_view", SchemaVersion(1, 0, 0))
+
+    "IncompatibleSchema msg names the schema" in {
+      RegisterError.IncompatibleSchema(ref, "reader/writer mismatch").msg must contain("com.myorg/page_view/1.0.0")
+    }
+
+    "InvalidSchema msg names the schema and the cause" in {
+      val e = RegisterError.InvalidSchema(ref, "not a valid JSON Schema")
+      e.msg must contain("com.myorg/page_view/1.0.0")
+      e.msg must contain("not a valid JSON Schema")
+    }
+
+    "RegistryUnavailable msg includes the cause" in {
+      RegisterError.RegistryUnavailable("connection refused").msg must contain("connection refused")
+    }
+
+    "RegistryTimeout has a stable msg" in {
+      RegisterError.RegistryTimeout.msg must contain("timed out")
     }
   }
 }

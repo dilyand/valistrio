@@ -15,7 +15,7 @@ import io.confluent.kafka.schemaregistry.client.rest.exceptions.RestClientExcept
 import io.confluent.kafka.schemaregistry.json.JsonSchema
 import org.typelevel.log4cats.Logger
 import valistrio.core.Config.SchemaRegistryConfig
-import valistrio.core.ValistrioError.{ValidateError, ValidationError}
+import valistrio.core.ValistrioError.{RegisterError, ValidateError, ValidationError}
 import valistrio.core.ValistrioError.ValidateError._
 import valistrio.core.domain.{SchemaRef, SchemaVersion}
 
@@ -48,6 +48,12 @@ final class ConfluentSchemaRegistry private (client: SchemaRegistryClient, timeo
 
   def register(ref: SchemaRef, schemaJson: String): IO[Unit] =
     IO.blocking(client.register(ref.toString, new JsonSchema(schemaJson))).void
+      .timeout(timeout)
+      .adaptError {
+        case _: TimeoutException    => RegisterError.RegistryTimeout
+        case e: RestClientException => mapRegisterException(e, ref)
+        case e: IOException         => RegisterError.RegistryUnavailable(e.getMessage)
+      }
 }
 
 object ConfluentSchemaRegistry {
@@ -87,6 +93,14 @@ object ConfluentSchemaRegistry {
       case 408       => SchemaRegistryTimeout
       case 503 | 504 => SchemaRegistryUnavailable(e.getMessage)
       case _         => SchemaRegistryUnavailable(e.getMessage)
+    }
+
+  private def mapRegisterException(e: RestClientException, ref: SchemaRef): RegisterError =
+    e.getStatus match {
+      case 409 => RegisterError.IncompatibleSchema(ref, e.getMessage)
+      case 422 => RegisterError.InvalidSchema(ref, e.getMessage)
+      case 408 => RegisterError.RegistryTimeout
+      case _   => RegisterError.RegistryUnavailable(e.getMessage)
     }
 
   // ---- Startup seeding ----
