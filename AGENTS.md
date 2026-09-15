@@ -1,8 +1,8 @@
 # AGENTS — Valistrio
 
 Valistrio is a JSON event validation and ingestion service: clients POST a self-describing
-event, Valistrio validates each payload against JSON Schemas held in a Confluent Schema
-Registry, and on the write path forwards the event to a Kafka topic — or, when the event
+event, Valistrio validates the `body` and each context against JSON Schemas held in a Confluent
+Schema Registry, and on the write path forwards the event to a Kafka topic — or, when the event
 fails in a way Valistrio can own, to a dead-letter queue.
 
 [README.md](README.md) is the human-facing doc (intro, quickstart, the full endpoint walkthrough
@@ -88,8 +88,8 @@ suite, which runs against the shipped `valistrio:it` image). Within `app`, one h
 
 - **The schema registry is the structural authority.** The seeded event schema
   (`io.github.dilyand.valistrio/event/1.0.0`) is the sole source of truth for event structure —
-  there are no hand-rolled structural decoders. Payload `data` stays `Json` and is validated
-  against its registered schema. Whatever the schema requires, the schema enforces; nothing is
+  there are no hand-rolled structural decoders. The `data` of the body and each context stays
+  `Json`, validated against its registered schema. Whatever the schema requires, the schema enforces; nothing is
   normalised away, so both the events topic and the DLQ carry the faithful original JSON.
 - **Parse, don't validate.** Prefer a smart constructor returning a proof-carrying type over a
   `Unit`/`Bool`-returning validator: `Validation` yields a `ValidatedEvent`, and a `Sink` accepts

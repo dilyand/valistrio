@@ -40,8 +40,8 @@ sbt it/test
 
 Every request body is a self-describing event: a top-level `schema` names Valistrio's event
 schema, and `data` carries the producer `meta`, the primary `body`, and any `contexts`. The
-`body` and each context name their own `schema`, which must be registered in the Schema
-Registry.
+`body` and each context are *typed data*: a `schema` reference plus the `data` it describes,
+and each `schema` must be registered in the Schema Registry.
 
 ```json
 {
@@ -67,18 +67,18 @@ Registry.
 | `schema` | yes | Must be `io.github.dilyand.valistrio/event/1.0.0` |
 | `data.meta.event_id` | yes | UUID; the idempotency key and Kafka record key |
 | `data.meta.produced_at` | yes | Timestamp string, client clock at creation time |
-| `data.body` | yes | The primary typed payload |
-| `data.contexts` | no | If present, a non-empty array of typed payloads |
+| `data.body` | yes | The primary typed data |
+| `data.contexts` | no | If present, a non-empty array of typed data |
 
 Unknown fields are **rejected** on the event, `body`, and each context. `meta` is the
 exception: it is **lenient** — extra fields beyond `event_id`/`produced_at` are neither
 rejected nor validated, and are written to the sink verbatim as part of the original event.
-Payload `schema` names follow `group/name/version` (reverse-domain `group`, `snake_case`
-`name`, integer SemVer `version`), e.g. `com.myorg/page_view/1.0.0`.
+Each `schema` reference follows `group/name/version` — reverse-domain `group`, `snake_case`
+`name`, integer SemVer `version` — e.g. `com.myorg/page_view/1.0.0`.
 
 ### `POST /validate`
 
-Validates an event without writing it anywhere — useful for checking schemas and payloads
+Validates an event without writing it anywhere — useful for checking schemas and data
 before going live.
 
 ```bash
@@ -93,12 +93,12 @@ across the event and every context are collected — validation does not stop at
 |---|---|---|
 | 400 | `malformed_json` | Body is not JSON |
 | 422 | `schema_not_found` | A referenced schema is not registered |
-| 422 | `schema_validation_failed` | Payload data does not conform to its schema |
+| 422 | `schema_validation_failed` | The `data` does not conform to its schema |
 | 503 | `schema_registry_unavailable` | Schema Registry cannot be reached |
 | 504 | `schema_registry_timeout` | Schema Registry did not respond in time |
 
-`recoverable: false` means retrying the identical payload can never succeed (`malformed_json`).
-`true` means it is fixable — by registering/fixing the schema, or by correcting the payload.
+`recoverable: false` means retrying the identical request can never succeed (`malformed_json`).
+`true` means it is fixable — by registering/fixing the schema, or by correcting the data.
 
 ### `POST /post`
 
@@ -140,7 +140,7 @@ A DLQ record wraps the salvaged event with its errors and the failure time:
 
 If the serialized `original` exceeds `server.maxBytes` it is replaced with `null` and
 `original_truncated: true` is added, so a DLQ record always fits the inbound size limit and an
-oversized payload is flagged rather than silently dropped.
+oversized event is flagged rather than silently dropped.
 
 ### `GET /health`
 
