@@ -2,10 +2,10 @@
 
 > **AI assistants:** read [AGENTS.md](AGENTS.md) first — it carries the deployment, operations, and contributing context you need.
 
-Valistrio is a JSON event validation and ingestion service. Clients send a self-describing
-event envelope; Valistrio validates it against JSON Schemas held in a Confluent Schema
-Registry and, on the write path, forwards the event to a Kafka topic — or, when the event
-is malformed in a way Valistrio can own, to a dead-letter queue.
+Valistrio is a JSON event validation and ingestion service. Clients POST a self-describing
+event; Valistrio validates it against JSON Schemas held in a Confluent Schema Registry and,
+on the write path, forwards the event to a Kafka topic — or, when the event is malformed in a
+way Valistrio can own, to a dead-letter queue.
 
 Its guiding philosophy: **once we get an event, we own it.** `/post` returns `200` whenever
 Valistrio has durably taken responsibility for an event — whether it landed on the events
@@ -38,9 +38,9 @@ sbt it/test
 
 ## Operator's manual
 
-Every request body is a self-describing envelope: a top-level `schema` names Valistrio's
-envelope schema, and `data` carries the producer `meta`, the primary `body` payload, and any
-`contexts`. Each payload names its own `schema`, which must be registered in the Schema
+Every request body is a self-describing event: a top-level `schema` names Valistrio's event
+schema, and `data` carries the producer `meta`, the primary `body`, and any `contexts`. The
+`body` and each context name their own `schema`, which must be registered in the Schema
 Registry.
 
 ```json
@@ -70,7 +70,7 @@ Registry.
 | `data.body` | yes | The primary typed payload |
 | `data.contexts` | no | If present, a non-empty array of typed payloads |
 
-Unknown fields are **rejected** on the envelope, `body`, and each context. `meta` is the
+Unknown fields are **rejected** on the event, `body`, and each context. `meta` is the
 exception: it is **lenient** — extra fields beyond `event_id`/`produced_at` are neither
 rejected nor validated, and are written to the sink verbatim as part of the original event.
 Payload `schema` names follow `group/name/version` (reverse-domain `group`, `snake_case`
@@ -78,7 +78,7 @@ Payload `schema` names follow `group/name/version` (reverse-domain `group`, `sna
 
 ### `POST /validate`
 
-Validates an envelope without writing it anywhere — useful for checking schemas and payloads
+Validates an event without writing it anywhere — useful for checking schemas and payloads
 before going live.
 
 ```bash

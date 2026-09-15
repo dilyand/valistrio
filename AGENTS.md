@@ -1,9 +1,9 @@
 # AGENTS — Valistrio
 
 Valistrio is a JSON event validation and ingestion service: clients POST a self-describing
-event envelope, Valistrio validates each payload against JSON Schemas held in a Confluent
-Schema Registry, and on the write path forwards the event to a Kafka topic — or, when the
-event fails in a way Valistrio can own, to a dead-letter queue.
+event, Valistrio validates each payload against JSON Schemas held in a Confluent Schema
+Registry, and on the write path forwards the event to a Kafka topic — or, when the event
+fails in a way Valistrio can own, to a dead-letter queue.
 
 [README.md](README.md) is the human-facing doc (intro, quickstart, the full endpoint walkthrough
 with `curl`). This file is the context for AI assistants. It has two halves — **Deployment &
@@ -22,7 +22,7 @@ It binds `0.0.0.0:8080` and needs two backing services, located purely by config
 - a **Kafka** broker (the events and DLQ sinks share one producer),
 - a **Confluent Schema Registry** (the validation authority).
 
-It **fails fast at startup**: it probes Kafka cluster reachability and seeds its own envelope
+It **fails fast at startup**: it probes Kafka cluster reachability and seeds its own event
 schema into the registry during resource acquisition, so an unreachable dependency crashes the
 process at boot rather than surfacing on the first request.
 
@@ -55,7 +55,7 @@ so the record still fits the inbound limit).
 
 `meta` is **lenient**: fields beyond the required `event_id`/`produced_at` are neither rejected
 nor validated, and are written to the sink verbatim as part of the faithful original event. The
-envelope, `body`, and each context reject unknown fields.
+event, `body`, and each context reject unknown fields.
 
 ## Idempotency
 
@@ -86,8 +86,8 @@ suite, which runs against the shipped `valistrio:it` image). Within `app`, one h
 
 ## Design principles
 
-- **The schema registry is the structural authority.** The seeded envelope schema
-  (`io.github.dilyand.valistrio/event/1.0.0`) is the sole source of truth for envelope structure —
+- **The schema registry is the structural authority.** The seeded event schema
+  (`io.github.dilyand.valistrio/event/1.0.0`) is the sole source of truth for event structure —
   there are no hand-rolled structural decoders. Payload `data` stays `Json` and is validated
   against its registered schema. Whatever the schema requires, the schema enforces; nothing is
   normalised away, so both the events topic and the DLQ carry the faithful original JSON.
