@@ -30,6 +30,19 @@ Configuration comes from one env var, `VALISTRIO_CONFIG` — a **base64-encoded 
 under the `valistrio` namespace (`server`, `schemaRegistry`, `kafka.topics.{events,dlq}`). Unset
 or empty falls back to built-in defaults. See the config block in [README.md](README.md#configuration).
 
+## Provisioning
+
+Two things must exist before Valistrio can serve `/post`; it does **not** create either:
+
+- **The events and DLQ topics** (`kafka.topics.{events,dlq}`). The startup probe checks broker
+  reachability, not topic existence, so provision both out-of-band, or run the broker with
+  auto-topic-creation enabled. A missing topic surfaces as a sink write failure on `/post`, not at
+  startup.
+- **Your payload schemas.** Valistrio seeds only its own event schema at startup; the `body`/context
+  schemas your events reference must be registered in the Schema Registry first, or `/post` and
+  `/validate` return `schema_not_found` (422). Register each under the **subject equal to its schema
+  reference** (the literal `group/name/version` string), as a plain JSON Schema (draft-07).
+
 ## Endpoints
 
 Full request/response detail and status tables are in [README.md](README.md#operators-manual);
