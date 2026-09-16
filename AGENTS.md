@@ -60,6 +60,13 @@ the contract essentials:
     the client should retry.
   - Deliberate asymmetry: malformed JSON is `400` on `/validate` but **owned** (`200 written:dlq`)
     on `/post`.
+- **`POST /v1/track`, `POST /v1/page`** — the RudderStack adapter. Terminates the RudderStack
+  browser SDK's data-plane protocol and maps each event into the event document, then forwards it to
+  the `/post` write path. The producer carries the body schema ref as `properties.schema` and any
+  contexts as `properties.contexts`; `messageId`/`originalTimestamp` map to `event_id`/`produced_at`
+  (generated when omitted). Status-only (the SDK ignores the body): `200` owned, `5xx` transient (the
+  same mapping as `/post`), `400` when the event can't be decoded/mapped. Serves the CORS preflight;
+  other `/v1/<type>` paths are unserved (404).
 - **`GET /health`** — `200 ok`, no auth, liveness only.
 
 A DLQ record is `{"original": <event JSON | null>, "errors": [...], "failed_at": "<ISO-8601>"}`,
@@ -91,8 +98,13 @@ suite, which runs against the shipped `valistrio:it` image). Within `app`, one h
 - **`core.pipeline`** — the orchestration: `Validation` (the multi-pass validation pipeline) and
   `Ingestion` (parse → validate → write | DLQ). This is the **only** layer that touches the
   resources.
-- **`core.http`** — `Routes` (all handlers: health, validate, post; decode → delegate → map the
-  response to a status) and `Server` (Ember + the middleware stack).
+- **`core.http`** — `Routes` (the health/validate/post handlers: decode → delegate → map the
+  response to a status), `PostStatus` (the shared `/post` status mapping, reused by the status-only
+  adapters) and `Server` (Ember + the middleware stack, where the adapter routes are composed in).
+- **`core.adapters`** — inbound protocol adapters that terminate a producer SDK's wire format and
+  forward to the pipeline. `EventDocument`/`TypedPayload` assemble the event document and `AdapterCors`
+  is the shared browser CORS policy; `adapters.rudderstack` holds the RudderStack wire model, mapper,
+  and routes. Reuses `pipeline.Ingestion` — it has no write logic of its own.
 - **`core.resources`** — the algebras and their live implementations, split into `resources.sinks`
   (`Sink`, `KafkaSink`, the shared `Kafka` producer) and `resources.schemas` (`SchemaRegistry`,
   `ConfluentSchemaRegistry`); `Logging` (the single shared logger) sits at the root.

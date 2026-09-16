@@ -142,6 +142,31 @@ If the serialized `original` exceeds `server.maxBytes` it is replaced with `null
 `original_truncated: true` is added, so a DLQ record always fits the inbound size limit and an
 oversized event is flagged rather than silently dropped.
 
+### RudderStack adapter (`POST /v1/track`, `POST /v1/page`)
+
+An inbound adapter that terminates the RudderStack browser SDK's data-plane protocol, so a stock
+RudderStack SDK can deliver into Valistrio unmodified. Point the SDK's `dataPlaneUrl` at Valistrio;
+it POSTs one event per request to `/v1/track` or `/v1/page` (batching off).
+
+The adapter maps each event into the event document above and forwards it to the same `/post` write
+path. The producer carries the body schema reference as `properties.schema` and any contexts as
+`properties.contexts` (an array of `{schema, data}`); both are lifted out and the remaining
+`properties` become the body `data`. `messageId` becomes `meta.event_id` and `originalTimestamp`
+becomes `meta.produced_at` (each generated when the SDK omits it).
+
+The SDK reads only the response status — the body is ignored:
+
+| HTTP | Meaning |
+|---|---|
+| 200 | Owned — written to the events topic, or salvaged to the DLQ |
+| 400 | The request could not be decoded or mapped (missing/invalid `properties.schema`); the SDK drops it |
+| 5xx | A transient infrastructure failure; the SDK retries (the same codes as `/post`) |
+
+The referenced `properties.schema` and any context schemas must be registered in the Schema
+Registry, exactly as for `/post`; an unknown schema is an owned failure salvaged to the DLQ.
+Cross-origin browser requests are handled — the adapter answers the CORS preflight and allows any
+origin (the SDK sends no credentials by default). Other `/v1/<type>` paths are not served.
+
 ### `GET /health`
 
 `200 OK` with body `ok`. No authentication; used as a liveness check.
