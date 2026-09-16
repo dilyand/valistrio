@@ -82,7 +82,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
 
   "KafkaSink" should {
     "write a validated event so the original JSON can be read back from the topic" in {
-      Kafka.producer(config).use { producer =>
+      Kafka.producer(config, 30.seconds).use { producer =>
         val sink = new KafkaSink[ValidatedEvent](producer, EventsTopic)
         for {
           _        <- sink.write(event)
@@ -96,7 +96,7 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
 
   "The DLQ KafkaSink" should {
     "write a FailedEvent so its original and errors can be read back from the DLQ topic" in {
-      Kafka.producer(config).use { producer =>
+      Kafka.producer(config, 30.seconds).use { producer =>
         val dlq = new KafkaSink[FailedEvent](producer, DlqTopic)
         for {
           _        <- dlq.write(failed)

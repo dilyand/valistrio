@@ -16,7 +16,7 @@ object Main extends IOApp {
 
   private def server(conf: Config): Resource[IO, Server] =
     Logging.resource.flatMap { implicit logger =>
-      (ConfluentSchemaRegistry.resource(conf.schemaRegistry), Kafka.producer(conf.kafka)).mapN {
+      (ConfluentSchemaRegistry.resource(conf.schemaRegistry), Kafka.producer(conf.kafka, conf.server.requestTimeout)).mapN {
         (registry, producer) =>
           val eventSink = new KafkaSink[ValidatedEvent](producer, conf.kafka.topics.events)
           val dlqSink   = new KafkaSink[FailedEvent](producer, conf.kafka.topics.dlq)

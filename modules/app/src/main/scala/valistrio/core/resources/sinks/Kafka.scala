@@ -3,6 +3,7 @@ package valistrio.core.resources.sinks
 import cats.effect.{IO, Resource}
 import fs2.kafka._
 import org.apache.kafka.clients.admin.{AdminClient, AdminClientConfig}
+import org.apache.kafka.clients.producer.ProducerConfig
 import valistrio.core.Config.KafkaConfig
 
 import java.util.Properties
@@ -19,8 +20,8 @@ object Kafka {
     * checks cluster reachability only (not that the configured topics exist) — topics are commonly
     * provisioned out-of-band, and brokers often disable auto-topic-creation.
     */
-  def producer(config: KafkaConfig): Resource[IO, KafkaProducer[IO, String, String]] =
-    Resource.eval(checkConnectivity(config)).flatMap(_ => producerResource(config))
+  def producer(config: KafkaConfig, requestTimeout: FiniteDuration): Resource[IO, KafkaProducer[IO, String, String]] =
+    Resource.eval(checkConnectivity(config)).flatMap(_ => producerResource(config, requestTimeout))
 
   private def checkConnectivity(config: KafkaConfig): IO[Unit] =
     adminClient(config)
@@ -36,10 +37,18 @@ object Kafka {
       AdminClient.create(props)
     })
 
-  private def producerResource(config: KafkaConfig): Resource[IO, KafkaProducer[IO, String, String]] = {
+  private def producerResource(config: KafkaConfig, requestTimeout: FiniteDuration): Resource[IO, KafkaProducer[IO, String, String]] = {
+    // Keep the producer's own deadlines under the endpoint's request timeout, so a stalled broker
+    // surfaces as SinkError.Timeout (a structured 504) before the outer HTTP timeout fires.
+    val deadlineMs = math.max(1000L, requestTimeout.toMillis * 4 / 5)
     val settings = ProducerSettings(Serializer[IO, String], Serializer[IO, String])
       .withBootstrapServers(config.bootstrapServers)
       .withAcks(Acks.All)
+      .withProperties(
+        ProducerConfig.MAX_BLOCK_MS_CONFIG        -> deadlineMs.toString,
+        ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG  -> deadlineMs.toString,
+        ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG -> deadlineMs.toString
+      )
 
     KafkaProducer.resource(settings)
   }
