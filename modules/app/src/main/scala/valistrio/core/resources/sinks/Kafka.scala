@@ -6,6 +6,7 @@ import org.apache.kafka.clients.admin.{AdminClient, AdminClientConfig}
 import org.apache.kafka.clients.producer.ProducerConfig
 import valistrio.core.Config.KafkaConfig
 
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -41,7 +42,11 @@ object Kafka {
     // Keep the producer's own deadlines under the endpoint's request timeout, so a stalled broker
     // surfaces as SinkError.Timeout (a structured 504) before the outer HTTP timeout fires.
     val deadlineMs = math.max(1000L, requestTimeout.toMillis * 4 / 5)
-    val settings = ProducerSettings(Serializer[IO, String], Serializer[IO, String])
+    // An event with no parseable event_id has no key (a malformed or truncated original), so the
+    // record is written unkeyed. The default String serializer NPEs on a null key, so tolerate it.
+    val nullableKey: Serializer[IO, String] =
+      Serializer.instance((_, _, key) => IO.pure(Option(key).map(_.getBytes(StandardCharsets.UTF_8)).orNull))
+    val settings = ProducerSettings(nullableKey, Serializer[IO, String])
       .withBootstrapServers(config.bootstrapServers)
       .withAcks(Acks.All)
       .withProperties(

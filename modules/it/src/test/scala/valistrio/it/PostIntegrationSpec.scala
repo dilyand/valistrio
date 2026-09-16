@@ -127,7 +127,9 @@ class PostIntegrationSpec
     * already consumed by an earlier call in the same test run.
     */
   private def messagesOnTopic(topic: String, window: FiniteDuration = 5.seconds): IO[List[Json]] = {
-    val settings = ConsumerSettings[IO, String, String]
+    // Key as Option[String] so a null key (an unkeyed DLQ record from a malformed body) reads as
+    // None rather than tripping the String deserializer; only the value is used here.
+    val settings = ConsumerSettings[IO, Option[String], String]
       .withBootstrapServers(kafka.externalBootstrap)
       .withGroupId(s"valistrio-it-post-${UUID.randomUUID()}")
       .withAutoOffsetReset(AutoOffsetReset.Earliest)
@@ -191,6 +193,21 @@ class PostIntegrationSpec
             (eventIds must not(contain(eventId))) and
             (originals.flatMap(o => (o \\ "event_id").flatMap(_.asString)) must contain(eventId)) and
             (dlq.flatMap(r => (r \\ "type").flatMap(_.asString)) must contain("schema_validation_failed"))
+        }
+      }
+    }
+
+    "return 200 accepted with written=dlq for malformed JSON, salvaging the raw body to the DLQ unkeyed" in {
+      // Regression: a malformed body has no parseable event_id, so the DLQ record is written with a
+      // null key. This must land as an owned failure (200), not NPE on the null key.
+      val malformed = "this is not json"
+      post(malformed).flatMap { case (status, body) =>
+        messagesOnTopic(DlqTopic).map { dlq =>
+          (status must beEqualTo(Status.Ok)) and
+            ((body \\ "accepted").headOption must beSome(Json.True)) and
+            ((body \\ "written").flatMap(_.asString) must contain("dlq")) and
+            ((body \\ "type").flatMap(_.asString) must contain("malformed_json")) and
+            (dlq.flatMap(r => (r \\ "original").headOption) must contain(Json.fromString(malformed)))
         }
       }
     }
