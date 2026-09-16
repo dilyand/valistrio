@@ -122,6 +122,11 @@ class PostIntegrationSpec
       Request[IO](method = Method.POST, uri = postUri).withEntity(body)
     )
 
+  private def postV1(eventType: String, body: String): IO[Status] =
+    TestHttp.status(
+      Request[IO](method = Method.POST, uri = Uri.unsafeFromString(s"${valistrio.url}/v1/$eventType")).withEntity(body)
+    )
+
   /** Reads whatever is currently on the topic within `window`, from the beginning,
     * using a fresh consumer group each call so repeated calls don't miss messages
     * already consumed by an earlier call in the same test run.
@@ -149,6 +154,23 @@ class PostIntegrationSpec
     s"""{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":{"event_id":"$eventId","produced_at":"2026-06-13T10:00:00Z"},"body":{"schema":"com.myorg/page_view/1.0.0","data":$bodyData}}}"""
 
   // ---- Tests ----
+
+  "POST /v1/track (RudderStack adapter, containerised)" should {
+
+    "map a RudderStack track event to the event document and write it to the events topic" in {
+      // The producer carries the body schema ref in properties.schema; the adapter strips it, leaving
+      // page_url as the body data (matching the registered com.myorg/page_view/1.0.0 schema), and uses
+      // messageId as the event_id. This exercises the built document against the real event schema.
+      val eventId = "018f1e2a-dead-beef-cafe-000000000020"
+      val wire =
+        s"""{"type":"track","event":"page_view","properties":{"page_url":"https://example.com","schema":"com.myorg/page_view/1.0.0"},"messageId":"$eventId","originalTimestamp":"2026-06-13T10:00:00Z"}"""
+      postV1("track", wire).flatMap { status =>
+        eventIdsOnTopic().map { ids =>
+          (status must beEqualTo(Status.Ok)) and (ids must contain(eventId))
+        }
+      }
+    }
+  }
 
   "POST /post (containerised)" should {
 
