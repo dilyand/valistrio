@@ -5,6 +5,7 @@ import valistrio.core.domain.SchemaRef
 
 sealed abstract class ValistrioError extends Throwable {
   val msg: String
+  override def getMessage: String = msg
 }
 
 object ValistrioError {

@@ -51,6 +51,11 @@ class ValidateErrorSpec extends Specification {
       (e: ValidateError) must beAnInstanceOf[ValidateError]
     }
 
+    "getMessage exposes msg rather than null" in {
+      val e: Throwable = MalformedJson("unexpected token")
+      e.getMessage must beEqualTo("Request body is not valid JSON. unexpected token")
+    }
+
     "ValidationErrors msg lists the underlying errors, not just a count" in {
       val ref = SchemaRef("com.myorg", "user", SchemaVersion(1, 0, 0))
       val agg = ValidationErrors(NonEmptyList.of(
