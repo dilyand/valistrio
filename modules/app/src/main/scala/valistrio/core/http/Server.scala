@@ -8,6 +8,7 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.server.middleware.{AutoSlash, Caching, DefaultHead, EntityLimiter, ErrorAction, ErrorHandling, Logger, ResponseTiming, Timeout}
 import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
+import valistrio.core.adapters.AdapterCors
 import valistrio.core.adapters.rudderstack.RudderStackRoutes
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
@@ -33,7 +34,7 @@ class Server(
     val validation = new Validation(schemaRegistry)
     val ingestion  = new Ingestion(validation, eventSink, dlqSink, conf.maxBytes)
     val routes =
-      Routes.health <+> Routes.validate(validation) <+> Routes.post(ingestion) <+> RudderStackRoutes(ingestion)
+      Routes.health <+> Routes.validate(validation) <+> Routes.post(ingestion) <+> AdapterCors(RudderStackRoutes(ingestion))
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
