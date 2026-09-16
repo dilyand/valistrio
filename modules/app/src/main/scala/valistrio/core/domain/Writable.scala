@@ -45,9 +45,11 @@ object Writable {
   /** A failed event packaged for the DLQ: the faithful original JSON of the event Valistrio
     * accepted, the collected validation errors, and the time it failed.
     *
-    * If the serialized `original` exceeds `maxBytes` it is dropped (`original` → `None`,
-    * `truncated` → `true`) so the DLQ record stays within the inbound size limit — an oversized
-    * payload is flagged, never silently lost.
+    * If the fully-encoded record (original + errors + metadata) exceeds `maxBytes`, the `original`
+    * is dropped (`original` → `None`, `truncated` → `true`) so the record stays within the inbound
+    * size limit — an oversized original is flagged, never silently lost. The errors/metadata are
+    * assumed to fit on their own; a wrapper that exceeds `maxBytes` even without the original is
+    * written as-is (the errors list is bounded by the number of schema violations).
     *
     * As a [[Writable]] its `json` is the wrapper below and its `key` is the original's `event_id`
     * when available (a truncated or malformed original has none, so the record is written unkeyed).
@@ -65,8 +67,9 @@ object Writable {
   object FailedEvent {
 
     def of(original: Json, errors: NonEmptyList[ResponseError], failedAt: Instant, maxBytes: Long): FailedEvent = {
-      val tooBig = original.noSpaces.getBytes(StandardCharsets.UTF_8).length > maxBytes
-      FailedEvent(Option.unless(tooBig)(original), tooBig, errors, failedAt)
+      val full   = FailedEvent(Some(original), truncated = false, errors, failedAt)
+      val tooBig = full.json.noSpaces.getBytes(StandardCharsets.UTF_8).length > maxBytes
+      if (tooBig) FailedEvent(None, truncated = true, errors, failedAt) else full
     }
 
     private def eventId(original: Json): Option[String] =
