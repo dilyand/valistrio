@@ -157,7 +157,7 @@ valistrio {
   server {
     host           = "0.0.0.0"
     port           = 8080
-    maxBytes       = 2097152   # 2 MB request body limit
+    maxBytes       = 1000000   # ~1 MB request body limit (kept under Kafka's producer limit)
     requestTimeout = 5s
   }
   schemaRegistry {
