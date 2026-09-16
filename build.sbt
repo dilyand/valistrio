@@ -108,7 +108,9 @@ lazy val app = project
     dockerRepository        := (if (isRelease) Some("ghcr.io/dilyand") else None),
     dockerBaseImage         := s"eclipse-temurin:$javaVersion-jre-jammy",
     dockerExposedPorts      := Seq(8080),
-    dockerUpdateLatest      := isRelease,
+    // Only a prod-ready release moves `:latest`; a pre-release (e.g. 0.1.0-rc1) publishes only
+    // its version-stamped tag.
+    dockerUpdateLatest      := isRelease && !version.value.contains("-"),
     // BuildInfo — exposes image coordinates to the IT module, derived from the
     // Docker settings so the IT container and the published image never drift.
     buildInfoPackage        := "valistrio",
