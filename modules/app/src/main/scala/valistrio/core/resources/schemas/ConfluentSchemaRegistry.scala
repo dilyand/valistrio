@@ -90,17 +90,16 @@ object ConfluentSchemaRegistry {
   private def mapRestClientException(e: RestClientException, ref: SchemaRef): ValidateError =
     e.getStatus match {
       case 404       => SchemaNotFound(ref)
-      case 408       => SchemaRegistryTimeout
-      case 503 | 504 => SchemaRegistryUnavailable(e.getMessage)
+      case 408 | 504 => SchemaRegistryTimeout
       case _         => SchemaRegistryUnavailable(e.getMessage)
     }
 
   private def mapRegisterException(e: RestClientException, ref: SchemaRef): RegisterError =
     e.getStatus match {
-      case 409 => RegisterError.IncompatibleSchema(ref, e.getMessage)
-      case 422 => RegisterError.InvalidSchema(ref, e.getMessage)
-      case 408 => RegisterError.RegistryTimeout
-      case _   => RegisterError.RegistryUnavailable(e.getMessage)
+      case 409       => RegisterError.IncompatibleSchema(ref, e.getMessage)
+      case 422       => RegisterError.InvalidSchema(ref, e.getMessage)
+      case 408 | 504 => RegisterError.RegistryTimeout
+      case _         => RegisterError.RegistryUnavailable(e.getMessage)
     }
 
   // ---- Startup seeding ----
