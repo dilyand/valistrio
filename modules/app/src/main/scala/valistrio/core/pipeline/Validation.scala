@@ -50,14 +50,29 @@ class Validation(registry: SchemaRegistry) {
           case Left(bug) =>
             IO.raiseError(new IllegalStateException(s"Event passed its schema but could not be extracted: $bug"))
           case Right(event) =>
-            val payloads = event.data.body :: event.data.contexts.fold(List.empty[TypedData])(_.toList)
-            payloads.parTraverse(td => registry.validate(td.schema, td.data).attemptNarrow[ValidateError]).flatMap { results =>
+            // Prefix each payload's error paths with its location in the event, so a body error and
+            // same-schema context errors are distinguishable (e.g. `$.data.contexts[1].data.user_id`).
+            val payloads: List[(String, TypedData)] =
+              ("$.data.body.data" -> event.data.body) ::
+                event.data.contexts.fold(List.empty[(String, TypedData)]) {
+                  _.toList.zipWithIndex.map { case (td, i) => s"$$.data.contexts[$i].data" -> td }
+                }
+            payloads.parTraverse { case (location, td) =>
+              registry.validate(td.schema, td.data).attemptNarrow[ValidateError].map {
+                case Left(ValidationFailed(errs)) =>
+                  Left(ValidationFailed(errs.map(e => e.copy(path = location + e.path.stripPrefix("$")))))
+                case other => other
+              }
+            }.flatMap { results =>
               NonEmptyList.fromList(results.collect { case Left(e) => e }) match {
                 case Some(errors) => IO.raiseError(ValidationErrors(errors))
                 case None =>
-                  ValidatedEvent.of(event) match {
-                    case Left(bug)        => IO.raiseError(new IllegalStateException(s"Validated event missing event_id: $bug"))
-                    case Right(validated) => IO.pure(validated)
+                  // Validation is the sole producer of ValidatedEvent: extract the id here, once
+                  // every payload has validated. A missing id means the event passed a schema that
+                  // requires it — a bug, not client input.
+                  event.data.meta.hcursor.get[String]("event_id") match {
+                    case Left(bug) => IO.raiseError(new IllegalStateException(s"Validated event missing event_id: ${bug.getMessage}"))
+                    case Right(id) => IO.pure(ValidatedEvent(event.json, id))
                   }
               }
             }

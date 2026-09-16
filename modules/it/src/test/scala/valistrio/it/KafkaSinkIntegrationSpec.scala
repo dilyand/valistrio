@@ -5,14 +5,16 @@ import cats.effect.IO
 import cats.effect.testing.specs2.CatsEffect
 import cats.effect.unsafe.implicits.global
 import fs2.kafka._
-import io.circe.parser
+import io.circe.{Json, parser}
 import org.apache.kafka.clients.admin.NewTopic
 import org.specs2.mutable.Specification
 import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
 import valistrio.core.Config.{KafkaConfig, KafkaTopics}
-import valistrio.core.domain.{Event, ResponseError}
+import valistrio.core.domain.{ResponseError, SchemaRef}
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
+import valistrio.core.pipeline.Validation
+import valistrio.core.resources.schemas.SchemaRegistry
 import valistrio.core.resources.sinks.{Kafka, KafkaSink}
 import valistrio.it.containers.KafkaContainer
 
@@ -70,8 +72,15 @@ class KafkaSinkIntegrationSpec extends Specification with BeforeAfterAll with Ca
 
   private val eventJson =
     """{"schema":"io.github.dilyand.valistrio/event/1.0.0","data":{"meta":{"event_id":"018f1e2a-dead-beef-cafe-000000000002","produced_at":"2026-06-13T10:00:00Z"},"body":{"schema":"com.myorg/page_view/1.0.0","data":{"page_url":"https://example.com"}}}}"""
-  private val json  = parser.parse(eventJson).toOption.get
-  private val event = ValidatedEvent.of(Event.fromJson(json).toOption.get).toOption.get
+  private val json = parser.parse(eventJson).toOption.get
+
+  // ValidatedEvent's constructor is private[core], so build it the only way the app does — through
+  // the validation pipeline, here backed by a registry that accepts everything.
+  private val okRegistry = new SchemaRegistry {
+    def validate(ref: SchemaRef, data: Json): IO[Unit]        = IO.unit
+    def register(ref: SchemaRef, schemaJson: String): IO[Unit] = IO.unit
+  }
+  private val event = new Validation(okRegistry).validateEvent(json).unsafeRunSync()
 
   private val failed = FailedEvent.of(
     json,

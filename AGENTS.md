@@ -92,9 +92,11 @@ suite, which runs against the shipped `valistrio:it` image). Within `app`, one h
   `Json`, validated against its registered schema. Whatever the schema requires, the schema enforces; nothing is
   normalised away, so both the events topic and the DLQ carry the faithful original JSON.
 - **Parse, don't validate.** Prefer a smart constructor returning a proof-carrying type over a
-  `Unit`/`Bool`-returning validator: `Validation` yields a `ValidatedEvent`, and a `Sink` accepts
-  only a `Writable`, so writing an unvalidated event is a *type error*, not a convention. Use
-  `Validated`/`ValidatedNel` to accumulate every error in one pass rather than short-circuiting.
+  `Unit`/`Bool`-returning validator. `Validation` is the sole producer of a `ValidatedEvent` (its
+  constructor is `private[core]`), and the events `Sink` accepts only that type — so an unvalidated
+  event can't reach the sink from outside `core`, and the pipeline is the single place that builds
+  one. Use `Validated`/`ValidatedNel` to accumulate every error in one pass rather than
+  short-circuiting.
 - **One error channel.** Effects raise `ValistrioError` (which extends `Throwable`) on the `IO`
   error channel and are recovered at the boundary with `attemptNarrow`; we do not return
   `IO[Either[...]]`. Pure, offline logic (JSON parsing, `SchemaRef` parsing) may return `Either`

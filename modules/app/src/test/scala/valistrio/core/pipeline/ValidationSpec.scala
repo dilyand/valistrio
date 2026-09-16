@@ -67,6 +67,11 @@ class ValidationSpec extends Specification {
     case ValidateResponse.Success         => Nil
   }
 
+  private def errorPaths(resp: ValidateResponse): List[String] = resp match {
+    case ValidateResponse.Failure(errors) => errors.toList.flatMap(_.path)
+    case ValidateResponse.Success         => Nil
+  }
+
   // ---- Tests ----
 
   "Validation" should {
@@ -131,6 +136,19 @@ class ValidationSpec extends Specification {
         contextSubject -> Left(ValidationFailed(NonEmptyList.one(ValidationError("$.user_id", "required"))))
       ))
       errorTypes(run(new Validation(stub), validEventWithContext)).count(_ == "schema_validation_failed") must beEqualTo(2)
+    }
+
+    // -- Error paths are scoped to the payload's location in the event --
+
+    "prefix a body error path with its event location" in {
+      val err = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string")))
+      errorPaths(run(new Validation(stubFor(bodySubject, Left(err))), validEvent)) must contain("$.data.body.data.page_url")
+    }
+
+    "distinguish same-schema contexts by their index in the path" in {
+      val err = ValidationFailed(NonEmptyList.one(ValidationError("$.user_id", "required")))
+      errorPaths(run(new Validation(stubFor(contextSubject, Left(err))), validEventTwoContexts)) must
+        contain(allOf("$.data.contexts[0].data.user_id", "$.data.contexts[1].data.user_id"))
     }
 
     // -- Structural gate short-circuits payload validation --

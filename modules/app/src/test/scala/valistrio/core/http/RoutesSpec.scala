@@ -135,7 +135,7 @@ class RoutesSpec extends Specification {
     "include path in validation failure errors" in {
       val err  = ValidationFailed(NonEmptyList.one(ValidationError("$.page_url", "must be a string")))
       val body = bodyJson(post(validEnvelope, new StubSchemaRegistry(responses = Map(bodySubject -> Left(err)))))
-      (body \\ "path").flatMap(_.asString) must contain("$.page_url")
+      (body \\ "path").flatMap(_.asString) must contain("$.data.body.data.page_url")
     }
 
     "include the recoverable flag in the response error object" in {
