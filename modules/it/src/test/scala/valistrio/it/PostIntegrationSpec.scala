@@ -12,6 +12,7 @@ import org.http4s.implicits._
 import org.specs2.mutable.Specification
 import org.specs2.specification.BeforeAfterAll
 import org.testcontainers.containers.Network
+import org.typelevel.ci._
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import valistrio.core.Config.SchemaRegistryConfig
 import valistrio.core.domain.SchemaRef
@@ -127,6 +128,17 @@ class PostIntegrationSpec
       Request[IO](method = Method.POST, uri = Uri.unsafeFromString(s"${valistrio.url}/v1/$eventType")).withEntity(body)
     )
 
+  /** A CORS preflight for the adapter path: OPTIONS with an Origin and the requested method. */
+  private def preflightV1(eventType: String): IO[(Status, Option[String])] =
+    TestHttp.client.use { c =>
+      val req = Request[IO](method = Method.OPTIONS, uri = Uri.unsafeFromString(s"${valistrio.url}/v1/$eventType"))
+        .putHeaders(
+          org.http4s.Header.Raw(ci"Origin", "https://demo.example"),
+          org.http4s.Header.Raw(ci"Access-Control-Request-Method", "POST")
+        )
+      c.run(req).use(resp => IO.pure((resp.status, resp.headers.get(ci"Access-Control-Allow-Origin").map(_.head.value))))
+    }
+
   /** Reads whatever is currently on the topic within `window`, from the beginning,
     * using a fresh consumer group each call so repeated calls don't miss messages
     * already consumed by an earlier call in the same test run.
@@ -168,6 +180,24 @@ class PostIntegrationSpec
         eventIdsOnTopic().map { ids =>
           (status must beEqualTo(Status.Ok)) and (ids must contain(eventId))
         }
+      }
+    }
+
+    "return 400 when the request cannot be mapped (no producer schema ref), writing nothing" in {
+      val eventId = "018f1e2a-dead-beef-cafe-000000000021"
+      val wire    = s"""{"type":"track","properties":{"page_url":"https://example.com"},"messageId":"$eventId"}"""
+      postV1("track", wire).flatMap { status =>
+        eventIdsOnTopic().map(ids => (status must beEqualTo(Status.BadRequest)) and (ids must not(contain(eventId))))
+      }
+    }
+
+    "return 404 for an unsupported /v1 type" in {
+      postV1("identify", "{}").map(_ must beEqualTo(Status.NotFound))
+    }
+
+    "answer the CORS preflight with an allow-origin header" in {
+      preflightV1("track").map { case (status, allowOrigin) =>
+        (status must beEqualTo(Status.Ok)) and (allowOrigin must beSome("*"))
       }
     }
   }

@@ -18,11 +18,27 @@ class RudderStackMapperSpec extends Specification {
   private def str(doc: Json, path: String*): Option[String] =
     field(doc, path: _*).flatMap(_.asString)
 
-  // A track event as the browser SDK enriches and POSTs it to /v1/track.
+  // A full track event as the browser SDK enriches and POSTs it to /v1/track: the producer's data,
+  // schema and contexts inside `properties`, wrapped in the SDK's own transport/enrichment fields
+  // (type, event, anonymousId, channel, integrations, sentAt, context). The mapper reads only
+  // `properties`, `messageId` and `originalTimestamp`, so the transport fields must not leak.
   private val trackWire =
     """{
       |  "type": "track",
       |  "event": "survey_create",
+      |  "userId": null,
+      |  "anonymousId": "a1b2c3d4-anon",
+      |  "channel": "web",
+      |  "integrations": {"All": true},
+      |  "context": {
+      |    "library": {"name": "RudderLabs JavaScript SDK", "version": "3.33.0"},
+      |    "locale": "en-GB",
+      |    "userAgent": "Mozilla/5.0",
+      |    "page": {"path": "/create", "url": "https://demo.example/create"}
+      |  },
+      |  "messageId": "1b2c3d4e-0000-4000-8000-000000000001",
+      |  "originalTimestamp": "2026-06-08T12:00:00.000Z",
+      |  "sentAt": "2026-06-08T12:00:00.100Z",
       |  "properties": {
       |    "survey_id": "s-1",
       |    "title": "My survey",
@@ -32,18 +48,17 @@ class RudderStackMapperSpec extends Specification {
       |      {"schema": "com.askattest.demo/user/1.0.0", "data": {"id": "u-1"}},
       |      {"schema": "com.askattest.demo/session/1.0.0", "data": {"id": "sess-1"}}
       |    ]
-      |  },
-      |  "messageId": "1b2c3d4e-0000-4000-8000-000000000001",
-      |  "originalTimestamp": "2026-06-08T12:00:00.000Z",
-      |  "anonymousId": "anon-1",
-      |  "context": {"library": {"name": "RudderLabs JavaScript SDK"}}
+      |  }
       |}""".stripMargin
 
-  // A page event as the browser SDK POSTs it to /v1/page.
+  // A full page event as the browser SDK POSTs it to /v1/page.
   private val pageWire =
     """{
       |  "type": "page",
       |  "name": "results",
+      |  "anonymousId": "a1b2c3d4-anon",
+      |  "channel": "web",
+      |  "context": {"library": {"name": "RudderLabs JavaScript SDK", "version": "3.33.0"}},
       |  "properties": {
       |    "name": "results",
       |    "path": "/results",
@@ -51,7 +66,8 @@ class RudderStackMapperSpec extends Specification {
       |    "contexts": [{"schema": "com.askattest.demo/user/1.0.0", "data": {"id": "u-1"}}]
       |  },
       |  "messageId": "1b2c3d4e-0000-4000-8000-000000000002",
-      |  "originalTimestamp": "2026-06-08T12:01:00.000Z"
+      |  "originalTimestamp": "2026-06-08T12:01:00.000Z",
+      |  "sentAt": "2026-06-08T12:01:00.100Z"
       |}""".stripMargin
 
   "RudderStackMapper" should {
@@ -64,12 +80,21 @@ class RudderStackMapperSpec extends Specification {
       str(doc, "data", "body", "schema") must beSome("com.askattest.demo/survey_create/1.0.0")
     }
 
-    "lift properties.schema and properties.contexts out, leaving the rest as the body data" in {
+    "carry every producer field into the body, dropping only the two ref-carrying keys" in {
       val doc  = mapWire(trackWire).toOption.get
       val keys = field(doc, "data", "body", "data").flatMap(_.asObject).map(_.keys.toList).getOrElse(Nil)
       keys must containTheSameElementsAs(List("survey_id", "title", "question_count"))
       keys must not(contain("schema"))
       keys must not(contain("contexts"))
+    }
+
+    "never leak the SDK's transport fields into the event" in {
+      // type/event/anonymousId/channel/integrations/context/sentAt sit outside properties, so none
+      // can reach body.data — a faithful map keeps the producer's payload and drops SDK plumbing.
+      val doc       = mapWire(trackWire).toOption.get
+      val keys      = field(doc, "data", "body", "data").flatMap(_.asObject).map(_.keys.toList).getOrElse(Nil)
+      val transport = List("type", "event", "anonymousId", "channel", "integrations", "context", "sentAt")
+      keys.intersect(transport) must beEmpty
     }
 
     "carry the contexts across as an array" in {
