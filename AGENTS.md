@@ -67,6 +67,15 @@ the contract essentials:
   (generated when omitted). Status-only (the SDK ignores the body): `200` owned, `5xx` transient (the
   same mapping as `/post`), `400` when the event can't be decoded/mapped. Serves the CORS preflight;
   other `/v1/<type>` paths are unserved (404).
+- **`POST /com.snowplowanalytics.snowplow/tp2`** — the Snowplow adapter. Terminates the Snowplow
+  browser SDK's tp2 collector protocol. The body is a `payload_data` envelope; valistrio ingests one
+  event per request, so its single-element `data` array is unwrapped, mapped into the event document,
+  and forwarded to the `/post` write path. Self-describing events (`e=ue`) carry their body in
+  `ue_pr`/`ue_px`; page views (`e=pv`) map to a Snowplow-native page-view schema built from the
+  atomic `url`/`page`/`refr` fields. iglu schema URIs are translated to valistrio refs, and
+  `eid`/`dtm` map to `event_id`/`produced_at` (generated when omitted). Status-only, the same mapping
+  as the RudderStack adapter; a batch of more than one event, or an undecodable body, is `400`. Shares
+  the browser CORS preflight handling.
 - **`GET /health`** — `200 ok`, no auth, liveness only.
 
 A DLQ record is `{"original": <event JSON | null>, "errors": [...], "failed_at": "<ISO-8601>"}`,
@@ -102,9 +111,10 @@ suite, which runs against the shipped `valistrio:it` image). Within `app`, one h
   response to a status), `PostStatus` (the shared `/post` status mapping, reused by the status-only
   adapters) and `Server` (Ember + the middleware stack, where the adapter routes are composed in).
 - **`core.adapters`** — inbound protocol adapters that terminate a producer SDK's wire format and
-  forward to the pipeline. `EventDocument`/`TypedPayload` assemble the event document and `AdapterCors`
-  is the shared browser CORS policy; `adapters.rudderstack` holds the RudderStack wire model, mapper,
-  and routes. Reuses `pipeline.Ingestion` — it has no write logic of its own.
+  forward to the pipeline. `EventFromThirdParty` assembles the event document and `AdapterCors` is the
+  shared browser CORS policy; `adapters.rudderstack` holds the RudderStack wire model, mapper, and
+  routes, and `adapters.snowplow` the Snowplow tp2 wire model, iglu translation, mapper, and routes.
+  Reuses `pipeline.Ingestion` — it has no write logic of its own.
 - **`core.resources`** — the algebras and their live implementations, split into `resources.sinks`
   (`Sink`, `KafkaSink`, the shared `Kafka` producer) and `resources.schemas` (`SchemaRegistry`,
   `ConfluentSchemaRegistry`); `Logging` (the single shared logger) sits at the root.
