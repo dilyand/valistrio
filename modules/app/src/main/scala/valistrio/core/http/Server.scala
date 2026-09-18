@@ -10,6 +10,7 @@ import org.typelevel.log4cats.{Logger => Log4CatsLogger}
 import valistrio.core.Config.ServerConfig
 import valistrio.core.adapters.AdapterCors
 import valistrio.core.adapters.rudderstack.RudderStackRoutes
+import valistrio.core.adapters.snowplow.SnowplowRoutes
 import valistrio.core.domain.Writable.{FailedEvent, ValidatedEvent}
 import valistrio.core.pipeline.{Ingestion, Validation}
 import valistrio.core.resources.schemas.SchemaRegistry
@@ -33,8 +34,9 @@ class Server(
   private def mkApp: HttpApp[IO] = {
     val validation = new Validation(schemaRegistry)
     val ingestion  = new Ingestion(validation, eventSink, dlqSink, conf.maxBytes)
+    val adapterRoutes = AdapterCors(RudderStackRoutes(ingestion) <+> SnowplowRoutes(ingestion))
     val routes =
-      Routes.health <+> Routes.validate(validation) <+> Routes.post(ingestion) <+> AdapterCors(RudderStackRoutes(ingestion))
+      Routes.health <+> Routes.validate(validation) <+> Routes.post(ingestion) <+> adapterRoutes
 
     val addAutoSlash: HttpRoutes[IO] => HttpRoutes[IO]   = AutoSlash(_)
     val addDefaultHead: HttpRoutes[IO] => HttpRoutes[IO] = DefaultHead(_)
@@ -53,7 +55,9 @@ class Server(
       HttpApp[IO] { req =>
         app(req).flatMap { resp =>
           val p             = req.uri.path.renderString
-          val shouldDisable = p == "/health" || p == "/validate" || p == "/post" || p.startsWith("/v1/")
+          val shouldDisable =
+            p == "/health" || p == "/validate" || p == "/post" || p.startsWith("/v1/") ||
+              p == "/com.snowplowanalytics.snowplow/tp2"
 
           if (shouldDisable) Caching.`no-store-response`[IO](resp)
           else IO.pure(resp)

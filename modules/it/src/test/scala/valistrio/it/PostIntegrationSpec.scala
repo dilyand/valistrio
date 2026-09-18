@@ -6,6 +6,7 @@ import cats.effect.unsafe.implicits.global
 import fs2.kafka._
 import io.circe.Json
 import io.circe.parser
+import io.circe.syntax._
 import org.apache.kafka.clients.admin.NewTopic
 import org.http4s._
 import org.http4s.implicits._
@@ -128,16 +129,39 @@ class PostIntegrationSpec
       Request[IO](method = Method.POST, uri = Uri.unsafeFromString(s"${valistrio.url}/v1/$eventType")).withEntity(body)
     )
 
-  /** A CORS preflight for the adapter path: OPTIONS with an Origin and the requested method. */
-  private def preflightV1(eventType: String): IO[(Status, Option[String])] =
+  /** A CORS preflight for an adapter path: OPTIONS with an Origin and the requested method. */
+  private def preflight(uri: Uri): IO[(Status, Option[String])] =
     TestHttp.client.use { c =>
-      val req = Request[IO](method = Method.OPTIONS, uri = Uri.unsafeFromString(s"${valistrio.url}/v1/$eventType"))
+      val req = Request[IO](method = Method.OPTIONS, uri = uri)
         .putHeaders(
           org.http4s.Header.Raw(ci"Origin", "https://demo.example"),
           org.http4s.Header.Raw(ci"Access-Control-Request-Method", "POST")
         )
       c.run(req).use(resp => IO.pure((resp.status, resp.headers.get(ci"Access-Control-Allow-Origin").map(_.head.value))))
     }
+
+  private def postTp2(body: String): IO[Status] =
+    TestHttp.status(
+      Request[IO](method = Method.POST, uri = tp2Uri).withEntity(body)
+    )
+
+  private def tp2Uri = Uri.unsafeFromString(s"${valistrio.url}/com.snowplowanalytics.snowplow/tp2")
+
+  /** A tp2 `payload_data` envelope wrapping the given events. */
+  private def tp2(events: Json*): String =
+    Json.obj(
+      "schema" -> "iglu:com.snowplowanalytics.snowplow/payload_data/jsonschema/1-0-4".asJson,
+      "data"   -> Json.fromValues(events)
+    ).noSpaces
+
+  /** One tp2 self-describing event carrying `innerSchema`/`innerData` inside `ue_pr`. */
+  private def ueEvent(eventId: String, innerSchema: String, innerData: Json): Json = {
+    val uePr = Json.obj(
+      "schema" -> "iglu:com.snowplowanalytics.snowplow/unstruct_event/jsonschema/1-0-0".asJson,
+      "data"   -> Json.obj("schema" -> innerSchema.asJson, "data" -> innerData)
+    ).noSpaces
+    Json.obj("e" -> "ue".asJson, "eid" -> eventId.asJson, "dtm" -> "1750000000000".asJson, "ue_pr" -> uePr.asJson)
+  }
 
   /** Reads whatever is currently on the topic within `window`, from the beginning,
     * using a fresh consumer group each call so repeated calls don't miss messages
@@ -196,7 +220,44 @@ class PostIntegrationSpec
     }
 
     "answer the CORS preflight with an allow-origin header" in {
-      preflightV1("track").map { case (status, allowOrigin) =>
+      preflight(Uri.unsafeFromString(s"${valistrio.url}/v1/track")).map { case (status, allowOrigin) =>
+        (status must beEqualTo(Status.Ok)) and (allowOrigin must beSome("*"))
+      }
+    }
+  }
+
+  "POST /com.snowplowanalytics.snowplow/tp2 (Snowplow adapter, containerised)" should {
+
+    "map a Snowplow self-describing event to the event document and write it to the events topic" in {
+      // The producer packs the body schema and data inside ue_pr as a self-describing event; the
+      // adapter translates the iglu ref to com.myorg/page_view/1.0.0, forwards page_url as the body
+      // data (matching the registered schema), and uses eid as the event_id.
+      val eventId = "018f1e2a-dead-beef-cafe-000000000030"
+      val body =
+        tp2(ueEvent(eventId, "iglu:com.myorg/page_view/jsonschema/1-0-0", Json.obj("page_url" -> "https://example.com".asJson)))
+      postTp2(body).flatMap { status =>
+        eventIdsOnTopic().map(ids => (status must beEqualTo(Status.Ok)) and (ids must contain(eventId)))
+      }
+    }
+
+    "return 400 for a batch of more than one event, writing nothing" in {
+      val eventId = "018f1e2a-dead-beef-cafe-000000000031"
+      val inner   = Json.obj("page_url" -> "https://example.com".asJson)
+      val body = tp2(
+        ueEvent(eventId, "iglu:com.myorg/page_view/jsonschema/1-0-0", inner),
+        ueEvent("018f1e2a-dead-beef-cafe-000000000032", "iglu:com.myorg/page_view/jsonschema/1-0-0", inner)
+      )
+      postTp2(body).flatMap { status =>
+        eventIdsOnTopic().map(ids => (status must beEqualTo(Status.BadRequest)) and (ids must not(contain(eventId))))
+      }
+    }
+
+    "return 400 when the request body cannot be decoded" in {
+      postTp2("this is not a payload_data envelope").map(_ must beEqualTo(Status.BadRequest))
+    }
+
+    "answer the CORS preflight with an allow-origin header" in {
+      preflight(tp2Uri).map { case (status, allowOrigin) =>
         (status must beEqualTo(Status.Ok)) and (allowOrigin must beSome("*"))
       }
     }
